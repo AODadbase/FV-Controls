@@ -1,10 +1,13 @@
 from rocketpy import Environment, SolidMotor, Rocket, Flight
+import datetime
+
 #set up presets
 #calculating aerodynamic data from preset
-Environment.latitude (float) # Launch site latitude.
-Environment.longitude (float) # Launch site longitude.
-Environment.elevation (float) # Launch site elevation.
-Environment.elev_array (array) # Two-dimensional Array containing the elevation information
-Environment.pressure (Function) # Air pressure in Pa as a function of altitude. Can be accessed as regular array, or called as a Function. 
-
-wyoming_sounding #sets pressure, temperature, wind-u and wind-v profiles and surface elevation obtained from an upper air sounding given by the file parameter through an URL. This URL should point to a data webpage given by selecting plot type as text: list, a station and a time at weather.uwyo. 
+def setEnvironment(latitude, longitude, elevation, hour):
+    env = Environment(latitude, longitude, elevation)
+    tomorrow = datetime.date.today() + datetime.timedelta(1)
+    env.set_date((tomorrow.year, tomorrow.month, tomorrow.day, hour)) #hour given in UTC
+    env.set_atmospheric_model(type="Forecast", file="GFS")
+    URL = "http://weather.uwyo.edu/cgi-bin/sounding?region=samer&TYPE=TEXT%3ALIST&YEAR=2019&MONTH=02&FROM=0500&TO=0512&STNM=83779"
+    env.set_atmospheric_model(type="wyoming_sounding", file=URL)
+    env.all_info()
