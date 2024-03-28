@@ -1,13 +1,22 @@
 from rocketpy import Environment, SolidMotor, Rocket, Flight
 import datetime
-
-#set up presets
-#calculating aerodynamic data from preset
-def setEnvironment(latitude, longitude, elevation, hour):
-    env = Environment(latitude, longitude, elevation)
-    tomorrow = datetime.date.today() + datetime.timedelta(1)
-    env.set_date((tomorrow.year, tomorrow.month, tomorrow.day, hour)) #hour given in UTC
-    env.set_atmospheric_model(type="Forecast", file="GFS")
+class Atmosphere:
+    latitude = null
+    longitude = null
+    elevation = null
+    hour = null
     URL = "http://weather.uwyo.edu/cgi-bin/sounding?region=samer&TYPE=TEXT%3ALIST&YEAR=2019&MONTH=02&FROM=0500&TO=0512&STNM=83779"
-    env.set_atmospheric_model(type="wyoming_sounding", file=URL)
-    env.all_info()
+    
+
+    def __init__ (env, latitude, longitude, elevation, hour):
+        env.latitude = latitude
+        env.longitude = longitude
+        env.elevation = elevation
+        env.hour = hour
+        today = datetime.date.today()
+        env.set_date((today.year, today.month, today.day, hour)) #hour given in UTC
+        env.set_atmospheric_model(type="Forecast", file="GFS")
+        env.set_atmospheric_model(type="wyoming_sounding", file=URL)
+
+
+#calculating aerodynamic data from preset
