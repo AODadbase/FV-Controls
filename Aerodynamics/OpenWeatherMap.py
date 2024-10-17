@@ -1,6 +1,5 @@
 #Atmosphere
 import requests
-import time
 from pyhigh import get_elevation
 
 
@@ -14,7 +13,7 @@ class atmosphere:
         self.altitudes = []
 
 
-    def get_weather_data(self):
+    def get_weather_data(self,Print=False):
         url = f"http://api.openweathermap.org/data/2.5/weather?q={self.location}&appid={self.api_key}&units=metric"
         response = requests.get(url)
         if response.status_code == 200:
@@ -22,6 +21,7 @@ class atmosphere:
             #print(data)
             self.lon = data['coord']['lon']
             self.lat = data['coord']['lat']
+            self.min_altitude = int(round(get_elevation(self.lat,self.lon),-1))
             self.weather_data = {
                 'location': data['name'],
                 'temperature': data['main']['temp'],
@@ -31,6 +31,8 @@ class atmosphere:
                 'wind_direction': data['wind']['deg'],
                 'weather_description': data['weather'][0]['description']
             }
+            if Print:
+                print(f'Ground conditions at ({self.lat}°N, {-self.lon}°W, {self.min_altitude} m) are Temperature: {self.weather_data['temperature']}°C, Pressure: {self.weather_data['pressure']*100} Pa, Wind Speed: {self.weather_data['wind_speed']} m/s {self.weather_data['wind_direction']}° (Clockwise from North)')
             return self.weather_data
         else:
             return f"Error: {response.status_code}"
@@ -38,14 +40,12 @@ class atmosphere:
     
     def isa_atmosphere(self,max_altitude):
         # Constants for the ISA model
-        min_altitude = int(round(get_elevation(self.lat,self.lon),-1))
-        #clear_cache() #optional, saves computer space however makes program take longer
         T0 = self.weather_data['temperature']+273.15  # Sea level standard temperature (Kelvin)
         P0 = self.weather_data['pressure']*100  # Sea level standard pressure (Pa)
         L = 0.0065   # Temperature lapse rate (K/m)
         R = 287.05   # Specific gas constant for dry air (J/(kg·K))
         g = 9.80665  # Standard gravity (m/s²)
-        for altitude in range(min_altitude,max_altitude+10,10):
+        for altitude in range(self.min_altitude,max_altitude+10,10):
             if altitude < 11000:  # Troposphere (up to 11 km)
                 T = T0 - L * altitude
                 P = P0 * (T / T0) ** (-g / (R * L))
@@ -110,13 +110,10 @@ class atmosphere:
         return output
 
 
-
 #main process
 def getdata(atmosphere,max_altitude):
-    atmosphere.get_weather_data()
+    atmosphere.get_weather_data(True)
     atmosphere.isa_atmosphere(max_altitude)
-    #atmosphere.print_data()
-    print(atmosphere.returndata())
     atmosphere.graph()
     return(atmosphere.returndata())
     
@@ -125,4 +122,3 @@ api_key = '1594000ffa3bac143ac4fbb405b368dc'
 location = "Champaign, US"
 champaignweather = atmosphere(api_key,location)
 getdata(champaignweather,10000)
-
