@@ -1,0 +1,70 @@
+import numpy as np
+import csv
+
+class state:
+    def __init__(self, angular, inertia, torques, filePath):
+        #Define all the class variables
+        self.angular = np.array(angular)
+        self.inertia = np.array(inertia)
+        self.torques = np.array(torques)
+        self.filePath = filePath
+        #Calculate angularDot using Euler's Rigid Body Dynamics
+        #self.angularDot = [
+        #    (((self.inertia[1]-self.inertia[2])*self.angular[1]*self.angular[2]+ self.torques[0])/self.inertia[0]),
+        #    (((self.inertia[2]-self.inertia[0])*self.angular[2]*self.angular[0]+ self.torques[1])/self.inertia[1]),
+        #    (((self.inertia[0]-self.inertia[1])*self.angular[0]*self.angular[1]+ self.torques[2])/self.inertia[2])
+        #]
+    def parseData(self):
+        #take data from rocket and extract angular velocity, inertial components, and torque components
+        self.times = []
+        self.masses = []
+        self.thrusts = []
+        self.dragForces = []
+        with open(self.filePath, "r", newline="") as file:
+            reader = csv.reader(file, delimiter=",")
+            for row in reader:
+                if row[0][0] != '#':
+                    self.times.append(row[0])
+                    self.masses.append(row[1])
+                    self.thrusts.append(row[2])
+                    self.dragForces.append(row[3])
+            return self.times, self.masses, self.thrusts, self.dragForces
+    def calculateA(self, time):
+        #Calculate inverse of angular matrix
+        #self.angularInv = np.linalg.inv(self.angular)
+
+        #Take matrix product of the angularInv and angularDot equations to get A (solving ẋ(t)=A(t)(x(t))
+        #A = self.angularInv @ self.angularDot
+        
+        #Rows of A: 
+        #[w_1,
+        # w_2,
+        # w_3,
+        # v_x,
+        # v_y,
+        # v_z,
+        #]
+        
+        index = self.times.index(time)
+        thrust = self.thrusts[index]
+        drag = self.dragForces[index]
+        mass = self.masses[index]
+        Fg = mass * 9.81
+
+        #Need to take partial of A[5][2]
+        A = [[0, -((self.inertia[2]-self.inertia[1])*self.angular[2])/self.inertia[0], -((self.inertia[2]-self.inertia[1])*self.angular[1])/self.inertia[0]],
+            [-((self.inertia[0]-self.inertia[2])*self.angular[2])/self.inertia[1], 0, -((self.inertia[0]-self.inertia[2])*self.angular[0])/self.inertia[1]],
+            [-((self.inertia[1]-self.inertia[0])*self.angular[1])/self.inertia[2], -((self.inertia[1]-self.inertia[0])*self.angular[0])/self.inertia[2], 0],
+            [0, 0, 0],
+            [0, 0, 0] ,
+            [0, 0, (thrust-drag-Fg)/mass]
+        ]
+
+        return A
+    def getState(self, time):
+        # fill in
+        #[self.angular[0],
+        # self.angular[1],
+        # self.angular[2],
+        # ]
+        print("fill function")
