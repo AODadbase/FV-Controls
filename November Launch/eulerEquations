@@ -48,14 +48,8 @@ class state:
         return drag_v
 
     def calculateA(self, time):
-        #Rows of A: 
-        #[w_1,
-        # w_2,
-        # w_3,
-        # v_x,
-        # v_y,
-        # v_z,
-        #]
+        #Cols of A: 
+        #[w_1, w_2, w_3, v_x, v_y, v_z,]
         
         index = self.times.index(time)
     
@@ -69,13 +63,26 @@ class state:
              [-((self.inertias[2]-self.inertias[1])*self.angular[1])/self.inertias[0], -((self.inertias[0]-self.inertias[2])*self.angular[0])/self.inertias[1], 0, 0, 0, (thrust-drag_v-Fg)/mass]]
 
         return A
+    
+    def calculateB(self, time):
+        c = 0.1
+        B = np.zeros((4, 4))
+        B[0][0] = c
+        return B
+
     def getState(self, time):
-        # fill in
-        #[self.angular[0],
-        # self.angular[1],
-        # self.angular[2],
-        # ]
-        print("fill function")
+        index = self.times.index(time)
+        verticalVelocity = self.verticalVelocities[index]
+        
+        currentState = [
+            self.angular[0],
+            self.angular[1],
+            self.angular[2],
+            0,
+            0,
+            verticalVelocity
+            ]
+        return currentState
 
 angular = [0, 0, 0]
 torques = [0, 0, 0]
