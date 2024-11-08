@@ -1,11 +1,60 @@
 import numpy as np
 import random 
+from scipy.optimize import fsolve
+
 dT = 0.1
+
+defaultMagneticFeild = np.array([1,1,1])
+
+
+
+def rotation_matrix_x(theta):
+    """Rotation matrix around the X-axis"""
+    return np.array([
+        [1, 0, 0],
+        [0, np.cos(theta), -np.sin(theta)],
+        [0, np.sin(theta), np.cos(theta)]
+    ])
+
+def rotation_matrix_y(theta):
+    """Rotation matrix around the Y-axis"""
+    return np.array([
+        [np.cos(theta), 0, np.sin(theta)],
+        [0, 1, 0],
+        [-np.sin(theta), 0, np.cos(theta)]
+    ])
+
+def rotation_matrix_z(theta):
+    """Rotation matrix around the Z-axis"""
+    return np.array([
+        [np.cos(theta), -np.sin(theta), 0],
+        [np.sin(theta), np.cos(theta), 0],
+        [0, 0, 1]
+    ])
+
+
+
+
+#Convention is RxRyRz * newMagneticVector = ground magneticvector
+#So, for the ground, we would multiply by these angles to get what is in the ground
+def equations(var, vector):
+    xAngle, yAngle, zAngle = var
+    rotatedVector = rotation_matrix_x(xAngle) @ rotation_matrix_y(yAngle) @ rotation_matrix_z(zAngle) @ vector - defaultMagneticFeild
+    return [rotatedVector[0], rotatedVector[1], rotatedVector[2]]
+
+def solve_for_given_magneticFeild(magneticField):
+    func_with_vec = lambda angles : equations(angles, magneticField)
+    guess = np.array([np.pi/2, np.pi/2,np.pi/2])
+    solution = fsolve(func_with_vec, guess)
+
+    return np.array(solution[0], solution[1], solution[2])
+
+
 class Kalman:
     def __init__(self, F, H, Q, P, x0, IT):
         #F stands for physics, because physics starts with F
         self.F = F 
-        #Transforms between the two basis
+        #Transforms from nomal basis to input basis
         self.H = H 
         # Q is the uncertainty gain
         self.Q = Q 
@@ -37,49 +86,16 @@ class Kalman:
         
     #For this case, the IT matrix will just be adding a force.
     #It's basis will need to be changed
-
+    
     #get rotation matrix angles from magnetometer angles
-    def updateTransitionMatricies(self,theta1,theta2,theta3):
-        c1 = np.cos(theta1)
-        c2 = np.cos(theta2)
-        c3 = np.cos(theta3)
-        s1 = np.sin(theta1)
-        s2 = np.sin(theta2)
-        s3 = np.sin(theta3)
-        xRotation = np.array([
-            [1,0,0,0,0,0],
-            [0,1,0,0,0,0],
-            [0,0,1,0,0,0],
-            [0,0,0,1,0,0],
-            [0,0,0,0,c1,-1 *s1],
-            [0,0,0,0,s1,c1],
-        ])
-        yRotation = np.array([
-            [1,0,0,0,0,0],
-            [0,1,0,0,0,0],
-            [0,0,1,0,0,0],
-            [0,0,0,c2,0,s2],
-            [0,0,0,0,1,0],
-            [0,0,0,-1* s2,0,c1],
-        ])
-        zRotation = np.array([
-            [1,0,0,0,0,0],
-            [0,1,0,0,0,0],
-            [0,0,1,0,0,0],
-            [0,0,0,c3,-1 * s3,0],
-            [0,0,0,s3,c3,0],
-            [0,0,0,0,0,1],
-        ])
-        self.H = np.dot(np.dot(zRotation, yRotation),xRotation)
-        self.x0[8] = (self.x0[7] - self.OldPoistions[7])/dT
-        self.IT = np.array([
-            [0,0,0],
-            [0,0,0],
-            [0,0,0],
-            [c2*c3,s1*s2*c3 - c1*s3,c1*s3 + c1*s2*c3],
-            [c2*s3,c3*c1 + s1*s2*s3,-c3*c1 + c1*s2*s3],
-            [-s2,c1*c2,c1*c2]
-        ])
+    def updateTransitionMatricies(self,thetaX,thetaY,thetaZ):
+      rotationMatrix = rotation_matrix_x(thetaX) @ rotation_matrix_y(thetaY) @ rotation_matrix_z(thetaZ)
+      
+    #   self.H = 
+
+    #   self.IT = 
+
+
 
     def timeStep(self, inputs, z_k, R, theta1,theta2,theta3):
         self.updateTransitionMatricies(theta1,theta2,theta3)
@@ -87,24 +103,51 @@ class Kalman:
         self.update(z_k, R)
 
 
+#TO DO!!!!!!
+# We havae ae rocket frenet frame, calculate using velocity and acceleration
+#calculate Q, a change of basis matrix to the ground frame since we KNOW what the frame will have a basis in the ground cords
+#We know the form of Q because it has to be rotation stuff
+#Get the angles and feed the angles into the kalman filter
+#The angles will be useful to know where we have to go
+#Thats basically it.
+#
+#
+#
+#
+#
+#
+#
+#
+
 class TrueValues:
-    def __init__(self, F,P,x0,IT):
+    def __init__(self, F,P,x0,IT, Frame):
         self.F = F
         self.P = P
         self.x0 = x0
         self.IT = IT
+        self.Frame = [np.array([0,0,0]),np.array([0,0,0]),np.array([0,0,0])]
+        self.previousPositions = [np.array([0,0,0]),np.array([0,0,0]),np.array([0,0,0])]
 
     def PropagateForward(self, inputs):
-        oldX = self.x0
-        self.x = np.dot(self.F, self.x) + np.dot(self.IT, inputs)
-        if(self.x0[0] == 0) :
-            self.x0[7] = 0
-        if(self.x0[0] < 0):
-            self.x0[7] = 
-        if(self.x0[0] > 0):
-            self.x0[7] = 
+        self.x0 = np.dot(self.F, self.x0) + np.dot(self.IT, inputs)
+
+        velocity1 = (self.x0 - self.previousPositions[-1])/dT
+        Tangent = velocity1/ np.linalg.norm(velocity1)
+
+        velocity2 = (self.previousPositions[-1] - self.previousPositions[-2])/dT
+        acceleration = (velocity1 - velocity2)/dT
+        BiNormalDirection = np.linalg.cross(velocity1, acceleration)
+        BiNormal = BiNormalDirection / np.linalg.norm(BiNormalDirection)
+        Normal = np.linalg.corss(BiNormal, Tangent)
+
+        self.Frame = [Tangent, Normal, BiNormal]
+        self.previousPositions.append(self.x0)
 
     #Calculate the right euler angle.
+    #Convention is to rotation T -> Z
+    def calculateChangeOfBasisAngles(self, magneticFieldVector):
+        return solve_for_given_magneticFeild(magneticFieldVector)
+      
 
     def addNoise(value,noise):
         noiseValue = random.randrange(1-noise,1.1+noise)
@@ -121,3 +164,6 @@ class TrueValues:
         if(value == "P"):
             val = 0.05
             return np.identity(6) * noise
+        if(value == "Angles"):
+            return
+    
