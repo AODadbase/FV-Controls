@@ -51,7 +51,7 @@ def solve_for_given_magneticFeild(magneticField):
 
 
 class Kalman:
-    def __init__(self, F, H, Q, P, x0, IT):
+    def __init__(self, F, H, Q, P, x0, IT, dIT):
         #F stands for physics, because physics starts with F
         self.F = F 
         #Transforms from nomal basis to input basis
@@ -64,6 +64,8 @@ class Kalman:
         self.x = x0 
         # How the inputs affect the stuff
         self.IT = IT
+
+        self.defaultIT = dIT
         self.OldPoistions = self.x
 
     #Estimates the next step using the change of basis matrix 
@@ -87,13 +89,26 @@ class Kalman:
     #For this case, the IT matrix will just be adding a force.
     #It's basis will need to be changed
     
-    #get rotation matrix angles from magnetometer angles
-    def updateTransitionMatricies(self,thetaX,thetaY,thetaZ):
-      rotationMatrix = rotation_matrix_x(thetaX) @ rotation_matrix_y(thetaY) @ rotation_matrix_z(thetaZ)
-      
-    #   self.H = 
 
-    #   self.IT = 
+    #rotation goes from ground to rocket
+    #get rotation matrix angles from magnetometer angles
+    def getRotationMatrix(self, magneticField):
+        angles = solve_for_given_magneticFeild(magneticField)
+        return rotation_matrix_x(angles[0]) @ rotation_matrix_y(angles[1]) @ rotation_matrix_z(angles[2])
+
+
+    def updateTransitionMatricies(self,measuredField):
+      rotationMatrix = self.getRotationMatrix(measuredField)
+      
+      self.H = np.zeros(6,3)
+      for i in range(3):
+        for j in range(3):
+            if(i == j):
+                self.H[i][j] = 1
+      for i in range(3):
+        for j in range(3):
+            self.H[i+3][j] = rotationMatrix[i][j]
+      self.IT = self.H @ self.defaultIT
 
 
 
@@ -125,7 +140,7 @@ class TrueValues:
         self.P = P
         self.x0 = x0
         self.IT = IT
-        self.Frame = [np.array([0,0,0]),np.array([0,0,0]),np.array([0,0,0])]
+        self.Frame = [np.array([1,0,0]),np.array([0,1,0]),np.array([0,0,1])]
         self.previousPositions = [np.array([0,0,0]),np.array([0,0,0]),np.array([0,0,0])]
 
     def PropagateForward(self, inputs):
@@ -145,25 +160,35 @@ class TrueValues:
 
     #Calculate the right euler angle.
     #Convention is to rotation T -> Z
-    def calculateChangeOfBasisAngles(self, magneticFieldVector):
-        return solve_for_given_magneticFeild(magneticFieldVector)
-      
+    # def calculateChangeOfBasisAngles(self, magneticFieldVector):
+    #     return solve_for_given_magneticFeild(magneticFieldVector)
+    
 
     def addNoise(value,noise):
         noiseValue = random.randrange(1-noise,1.1+noise)
         return value * noiseValue
 
+    def getNoisyState(self):
+        positions = self.getPositions()
+        velocities = self.getVelocities()
+        returnArray = np.array([positions[0],positions[1], positions[2], velocities[3], velocities[4], velocities[5]])
+        return returnArray
 
-    def getNoisyValues(self,value,noise):
-        if(value == "X"):
-            a = []
-            for x in self.x0:
-                a.append(self.addNoise(x,noise))
-            return np.array(a)
 
-        if(value == "P"):
-            val = 0.05
-            return np.identity(6) * noise
-        if(value == "Angles"):
-            return
+    def STDToFrameMatrix(self):
+        matrix =  np.zeros(3,3)
+        for i in range(3):
+            for j in range(3):
+                matrix[j][i] = self.Frame[i][j]
+        return np.linalg.inv(matrix)
+
+    def getFramesMagneticVector(self):
+        noisyField = np.array(self.addNoise(defaultMagneticFeild[0], 0.05),self.addNoise(defaultMagneticFeild[1], 0.05),self.addNoise(defaultMagneticFeild[2], 0.05))
+        return self.STDToFrameMatrix() @ noisyField
     
+    def getPositions(self):
+        return np.array([self.addNoise(self.x0[0],0.05), self.addNoise(self.x0[1],0.05), self.addNoise(self.x0[2], 0.05)])
+    
+    def getVelocities(self):
+        groundVelocities = np.array([self.addNoise(self.x0[3],0.05), self.addNoise(self.x0[4],0.05), self.addNoise(self.x0[5],0.05)])
+        return self.STDToFrameMatrix() @ groundVelocities
