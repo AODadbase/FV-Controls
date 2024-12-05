@@ -47,7 +47,7 @@ def solve_for_given_magneticFeild(magneticField):
     guess = np.array([np.pi/2, np.pi/2,np.pi/2])
     solution = fsolve(func_with_vec, guess)
 
-    return np.array(solution[0], solution[1], solution[2])
+    return np.array([solution[0], solution[1], solution[2]])
 
 
 class Kalman:
@@ -66,7 +66,6 @@ class Kalman:
         self.IT = IT
 
         self.defaultIT = dIT
-        self.OldPoistions = self.x
 
     #Estimates the next step using the change of basis matrix 
     #Inputs are the inputs from the controls
@@ -77,7 +76,6 @@ class Kalman:
     #R is the input variance
 
     def update(self, z_k, R):
-        self.OldPoistions = self.x
         inverted_part = np.dot(np.dot(self.H, self.P), self.H.T) + R
         K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(inverted_part))
         self.x = self.x + np.dot(K, z_k - np.dot(self.H, self.x))
@@ -96,24 +94,21 @@ class Kalman:
         angles = solve_for_given_magneticFeild(magneticField)
         return rotation_matrix_x(angles[0]) @ rotation_matrix_y(angles[1]) @ rotation_matrix_z(angles[2])
 
-
     def updateTransitionMatricies(self,measuredField):
       rotationMatrix = self.getRotationMatrix(measuredField)
       
-      self.H = np.zeros(6,3)
+      self.H = np.zeros((6,6))
       for i in range(3):
         for j in range(3):
             if(i == j):
                 self.H[i][j] = 1
       for i in range(3):
         for j in range(3):
-            self.H[i+3][j] = rotationMatrix[i][j]
+            self.H[i+3][j+3] = rotationMatrix[i][j]
       self.IT = self.H @ self.defaultIT
 
-
-
-    def timeStep(self, inputs, z_k, R, theta1,theta2,theta3):
-        self.updateTransitionMatricies(theta1,theta2,theta3)
+    def timeStep(self, inputs, z_k, R, field):
+        self.updateTransitionMatricies(field)
         self.estimate(inputs)
         self.update(z_k, R)
 
@@ -133,27 +128,38 @@ class Kalman:
 #
 #
 #
+def addNoise(value,noise):
+    noiseValue = 1 + (random.random() - 0.5)*noise
+    return value * noiseValue
 
 class TrueValues:
-    def __init__(self, F,P,x0,IT, Frame):
+    def __init__(self, F,P,x0,IT):
         self.F = F
         self.P = P
         self.x0 = x0
         self.IT = IT
         self.Frame = [np.array([1,0,0]),np.array([0,1,0]),np.array([0,0,1])]
-        self.previousPositions = [np.array([0,0,0]),np.array([0,0,0]),np.array([0,0,0])]
+        self.previousPositions = [x0]
+
+    def initializePositions(self):
+        for i in range(5):
+            self.x0 = np.dot(self.F, self.x0)
+            self.previousPositions.append(self.x0)
 
     def PropagateForward(self, inputs):
         self.x0 = np.dot(self.F, self.x0) + np.dot(self.IT, inputs)
-
+        
         velocity1 = (self.x0 - self.previousPositions[-1])/dT
-        Tangent = velocity1/ np.linalg.norm(velocity1)
+        ThreeVelocity = np.array([velocity1[3][0], velocity1[4][0], velocity1[5][0]])
+        Tangent = ThreeVelocity/ np.linalg.norm(ThreeVelocity)
+        
 
         velocity2 = (self.previousPositions[-1] - self.previousPositions[-2])/dT
-        acceleration = (velocity1 - velocity2)/dT
-        BiNormalDirection = np.linalg.cross(velocity1, acceleration)
+        ThreeVelocity2 = np.array([velocity2[3][0], velocity2[4][0], velocity2[5][0]])
+        acceleration = (ThreeVelocity - ThreeVelocity2)/dT
+        BiNormalDirection = np.linalg.cross(ThreeVelocity, acceleration)
         BiNormal = BiNormalDirection / np.linalg.norm(BiNormalDirection)
-        Normal = np.linalg.corss(BiNormal, Tangent)
+        Normal = np.linalg.cross(BiNormal, Tangent)
 
         self.Frame = [Tangent, Normal, BiNormal]
         self.previousPositions.append(self.x0)
@@ -164,31 +170,28 @@ class TrueValues:
     #     return solve_for_given_magneticFeild(magneticFieldVector)
     
 
-    def addNoise(value,noise):
-        noiseValue = random.randrange(1-noise,1.1+noise)
-        return value * noiseValue
 
     def getNoisyState(self):
         positions = self.getPositions()
         velocities = self.getVelocities()
-        returnArray = np.array([positions[0],positions[1], positions[2], velocities[3], velocities[4], velocities[5]])
+        returnArray = np.array([positions[0],positions[1], positions[2], velocities[0], velocities[1], velocities[2]])
         return returnArray
 
 
     def STDToFrameMatrix(self):
-        matrix =  np.zeros(3,3)
+        matrix =  np.zeros((3,3))
         for i in range(3):
             for j in range(3):
                 matrix[j][i] = self.Frame[i][j]
         return np.linalg.inv(matrix)
 
     def getFramesMagneticVector(self):
-        noisyField = np.array(self.addNoise(defaultMagneticFeild[0], 0.05),self.addNoise(defaultMagneticFeild[1], 0.05),self.addNoise(defaultMagneticFeild[2], 0.05))
+        noisyField = np.array([addNoise(defaultMagneticFeild[0], 0.05),addNoise(defaultMagneticFeild[1], 0.05),addNoise(defaultMagneticFeild[2], 0.05)])
         return self.STDToFrameMatrix() @ noisyField
     
     def getPositions(self):
-        return np.array([self.addNoise(self.x0[0],0.05), self.addNoise(self.x0[1],0.05), self.addNoise(self.x0[2], 0.05)])
+        return np.array([addNoise(self.x0[0],0.05), addNoise(self.x0[1],0.05), addNoise(self.x0[2], 0.05)])
     
     def getVelocities(self):
-        groundVelocities = np.array([self.addNoise(self.x0[3],0.05), self.addNoise(self.x0[4],0.05), self.addNoise(self.x0[5],0.05)])
+        groundVelocities = np.array([addNoise(self.x0[3],0.05), addNoise(self.x0[4],0.05), addNoise(self.x0[5],0.05)])
         return self.STDToFrameMatrix() @ groundVelocities
