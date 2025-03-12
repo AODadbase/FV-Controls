@@ -1,8 +1,8 @@
 import numpy as np
 import random 
 from scipy.optimize import fsolve
-
-dT = 0.1
+import os
+#dT = 0.1
 
 defaultMagneticFeild = np.array([1,1,1])
 
@@ -51,7 +51,7 @@ def solve_for_given_magneticFeild(magneticField):
 
 
 class Kalman:
-    def __init__(self, F, H, Q, P, x0, IT, dIT):
+    def __init__(self, F, H, Q, P, x0, IT, dIT, mass):
         #F stands for physics, because physics starts with F
         self.F = F 
         #Transforms from nomal basis to input basis
@@ -64,8 +64,9 @@ class Kalman:
         self.x = x0 
         # How the inputs affect the stuff
         self.IT = IT
-
+        self.mass = mass
         self.defaultIT = dIT
+        self.dT = 0.1
 
     #Estimates the next step using the change of basis matrix 
     #Inputs are the inputs from the controls
@@ -76,11 +77,24 @@ class Kalman:
     #R is the input variance
 
     def update(self, z_k, R):
+        self.updateFMatrix()
         inverted_part = np.dot(np.dot(self.H, self.P), self.H.T) + R
         K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(inverted_part))
         self.x = self.x + np.dot(K, z_k - np.dot(self.H, self.x))
         self.P = np.dot((np.eye(self.P.shape[0]) - np.dot(K, self.H)), self.P)
 
+    def updateFMatrix(self):
+        dT = self.dT
+        velo = np.array([self.x[3], self.x[4], self.x[5]])
+        DC = 10                                                         #Add in the drag coefficient and AREA PLZ!!!!@@!@@@$@#$#%^&*^$%@#%&*
+        area = 10
+        DragCoeff = (-0.5 * 1.225 * DC * area * np.linalg.norm(velo))/self.mass
+        self.F =np.array([[1,0,0,dT,0,0],
+             [0,1,0,0,dT,0],
+             [0,0,1,0,0,dT],
+             [0,0,0,1 + DragCoeff,0,0],
+             [0,0,0,0,1 + DragCoeff,0],
+             [0,0,0,0,0,1 + DragCoeff - 9.8/velo[3]]])
 
     #Need to update the H matrix after every step and the IT matrix
         
@@ -112,34 +126,47 @@ class Kalman:
         self.estimate(inputs)
         self.update(z_k, R)
 
-
-#TO DO!!!!!!
-# We havae ae rocket frenet frame, calculate using velocity and acceleration
-#calculate Q, a change of basis matrix to the ground frame since we KNOW what the frame will have a basis in the ground cords
-#We know the form of Q because it has to be rotation stuff
-#Get the angles and feed the angles into the kalman filter
-#The angles will be useful to know where we have to go
-#Thats basically it.
-#
-#
-#
-#
-#
-#
-#
-#
 def addNoise(value,noise):
     noiseValue = 1 + (random.random() - 0.5)*noise
     return value * noiseValue
 
+
+
 class TrueValues:
-    def __init__(self, F,P,x0,IT):
-        self.F = F
-        self.P = P
+    def __init__(self,x0, theta0, constants, dt):
         self.x0 = x0
-        self.IT = IT
+        self.mass = constants["mass"]
         self.Frame = [np.array([1,0,0]),np.array([0,1,0]),np.array([0,0,1])]
         self.previousPositions = [x0]
+
+        #theta0 stores [theta1, theta2, theat3, w1,w2,w3]
+        self.theta = theta0
+        self.constants = constants   
+        self.dt = dt    
+        self.time = 0
+        self.thrustT = [] 
+        self.thrustS = []
+        self.updateFMatrix() 
+        self.initializeThrust()
+        self.initializePositions()
+        
+    def initializeThrust(self):
+        path = os.path.abspath('.')
+        f = open(path + "\\Kalman\\AeroTech_HP-I280DM.eng", "r")
+        i = 0
+        for line in f:
+            if(i > 2):
+                vals = line.split()
+                self.thrustT.append(float(vals[0]))
+                self.thrustS.append(float(vals[1]))
+            i += 1
+    
+    def getThrust(self, time):
+        
+        if(time > self.thrustT[len(self.thrustT) - 1]):
+            return np.array([0,0,0])
+        thrustMagnitude = np.interp(time, self.thrustT, self.thrustS)
+        return self.Frame[2] * thrustMagnitude
 
     def initializePositions(self):
         for i in range(5):
@@ -147,15 +174,24 @@ class TrueValues:
             self.previousPositions.append(self.x0)
 
     def PropagateForward(self, inputs):
-        self.x0 = np.dot(self.F, self.x0) + np.dot(self.IT, inputs)
+        dT = self.dt
+        self.time += dT
+
+        self.updateFMatrix()
+        self.x0 = np.dot(self.F, self.x0)
+        self.x0[5] -= 9.8 * dT
+        thrustA = self.getThrust(self.time)/(self.mass)
+        self.x0[3] += thrustA[0] * dT
+        self.x0[4] += thrustA[1] * dT
+        self.x0[5] += thrustA[2] * dT
         
         velocity1 = (self.x0 - self.previousPositions[-1])/dT
-        ThreeVelocity = np.array([velocity1[3][0], velocity1[4][0], velocity1[5][0]])
+        ThreeVelocity = np.array([velocity1[3], velocity1[4], velocity1[5]])
         Tangent = ThreeVelocity/ np.linalg.norm(ThreeVelocity)
         
 
         velocity2 = (self.previousPositions[-1] - self.previousPositions[-2])/dT
-        ThreeVelocity2 = np.array([velocity2[3][0], velocity2[4][0], velocity2[5][0]])
+        ThreeVelocity2 = np.array([velocity2[3], velocity2[4], velocity2[5]])
         acceleration = (ThreeVelocity - ThreeVelocity2)/dT
         BiNormalDirection = np.linalg.cross(ThreeVelocity, acceleration)
         BiNormal = BiNormalDirection / np.linalg.norm(BiNormalDirection)
@@ -164,11 +200,58 @@ class TrueValues:
         self.Frame = [Tangent, Normal, BiNormal]
         self.previousPositions.append(self.x0)
 
+
+
+        velo = np.array([self.x0[3], self.x0[4], self.x0[5]])
+        wPrime = np.array([self.theta[3], self.theta[4]])
+
+
+        correctiveCoeff = self.constants["Mk"] * np.dot(velo, velo) / np.linalg.norm(wPrime)
+
+        inertias = self.constants["inertias"]
+        FinMoments = self.constants["FinMoments"]
+        curThe = self.theta
+        #Coding in euler's dynamical equations
+
+        w1Dot = (1/inertias[0]) *((inertias[2] - inertias[1]) * curThe[2]*curThe[1] + (correctiveCoeff * curThe[0]) + FinMoments[0])
+        w2Dot = (1/inertias[1]) * ((inertias[2] - inertias[0])*curThe[0]*curThe[2] + (correctiveCoeff*curThe[1]) + FinMoments[1])
+        w3Dot = (1/inertias[2]) * ((inertias[0] - inertias[1]) *curThe[0]*curThe[1] + FinMoments[2])
+
+        self.theta[3] += w1Dot * dT
+        self.theta[4] += w2Dot * dT
+        self.theta[5] += w3Dot * dT
+        self.theta[0] += self.theta[3] * dT
+        self.theta[1] += self.theta[4] * dT
+        self.theta[2] += self.theta[5] * dT
+
+        # self.applyWind(dT)
+        # self.applyInputs(inputs, dT)
+
+    # def applyWind(self, dt):
+
+    # def applyInputs(self, inputs, dt):
+
+    #FOR WIND, TAKE ELI"S CODE
+
+
+
     #Calculate the right euler angle.
     #Convention is to rotation T -> Z
     # def calculateChangeOfBasisAngles(self, magneticFieldVector):
     #     return solve_for_given_magneticFeild(magneticFieldVector)
     
+    def updateFMatrix(self):
+        velo = np.array([self.x0[3], self.x0[4], self.x0[5]])
+        DC = self.constants["dragCoeff"]                                                         #Add in the drag coefficient and AREA PLZ!!!!@@!@@@$@#$#%^&*^$%@#%&*
+        area = self.constants["area"]      
+        dT = self.dt
+        DragCoeff = (-0.5 * 1.225 * DC * area * np.linalg.norm(velo))/self.mass
+        self.F =np.array([[1,0,0,dT,0,0],
+                        [0,1,0,0,dT,0],
+                        [0,0,1,0,0,dT],
+                        [0,0,0,1 + DragCoeff,0,0],
+                        [0,0,0,0,1 + DragCoeff,0],
+                        [0,0,0,0,0,1 + DragCoeff]])
 
 
     def getNoisyState(self):
@@ -195,3 +278,24 @@ class TrueValues:
     def getVelocities(self):
         groundVelocities = np.array([addNoise(self.x0[3],0.05), addNoise(self.x0[4],0.05), addNoise(self.x0[5],0.05)])
         return self.STDToFrameMatrix() @ groundVelocities
+
+    def getThetas(self):
+        noise = 0.05
+        return np.array([addNoise(self.theta[0],noise), addNoise(self.theta[1],noise), addNoise(self.theta[2], noise)])
+    
+    def getOmegas(self):
+        noise = 0.05
+        return np.array([addNoise(self.theta[3],noise), addNoise(self.theta[4],noise), addNoise(self.theta[5],noise)])
+    
+    def getPositionsReal(self):
+        return np.array([self.x0[0], self.x0[1], self.x0[2]])
+    
+    def getVelocitiesReal(self):
+        groundVelocities = np.array([self.x0[3], self.x0[4], self.x0[5],0.05])
+        return groundVelocities
+
+    def getThetasReal(self):
+        return np.array([self.theta[0] % 2 * np.pi, self.theta[1]% 2 * np.pi, self.theta[2]% 2 * np.pi])
+    
+    def getOmegasReal(self):
+        return np.array([self.theta[3], self.theta[4], self.theta[5]])
