@@ -1,5 +1,6 @@
 import numpy as np
 import csv
+import math 
 
 class state:
     def __init__(self, angular, inertias, torques, filePath):
@@ -60,16 +61,25 @@ class state:
 
         A = [[0, -((self.inertias[0]-self.inertias[2])*self.angular[2])/self.inertias[1], -((self.inertias[1]-self.inertias[0])*self.angular[1])/self.inertias[2], 0, 0, 0],
              [-((self.inertias[2]-self.inertias[1])*self.angular[2])/self.inertias[0], 0, -((self.inertias[1]-self.inertias[0])*self.angular[0])/self.inertias[2], 0, 0 ,0],
-             [-((self.inertias[2]-self.inertias[1])*self.angular[1])/self.inertias[0], -((self.inertias[0]-self.inertias[2])*self.angular[0])/self.inertias[1], 0, 0, 0, (thrust-drag_v-Fg)/mass]]
+             [-((self.inertias[2]-self.inertias[1])*self.angular[1])/self.inertias[0], -((self.inertias[0]-self.inertias[2])*self.angular[0])/self.inertias[1], 0, 0, 0, 0],
+             [0, 0, 0, 0 ,0 ,0],
+             [0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, (thrust-drag_v-Fg)/mass]]
 
         return A
     
     def calculateB(self, time):
         c = 0.1
-        B = np.zeros((4, 4))
+        B = np.zeros((6, 4))
         B[0][0] = c
         return B
-
+    
+    def calcuateNextState(self, timeNot, time):
+        oldState = self.getState(timeNot)
+        nextState = math.exp(self.calculateA(time)*(time-timeNot)) * oldState
+        return nextState
+    def calculateNextStateControled(self, time):
+        
     def getState(self, time):
         index = self.times.index(time)
         verticalVelocity = self.verticalVelocities[index]
