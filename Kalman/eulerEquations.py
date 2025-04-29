@@ -2,52 +2,35 @@ import numpy as np
 import csv
 from scipy.optimize import approx_fprime
 import sympy as sp
+from scipy import linalg
 
-class state:
-    def __init__(self, angular, inertias, torques, filePath):
-        #Define all the class variables
-        self.angular = np.array(angular)
-        self.inertias = np.array(inertias)
-        self.torques = np.array(torques)
-        self.filePath = filePath
+class PhysicsCalc:
+    def __init__(self):
+        self.poop = 1
 
-    def parseData(self):
-        #take data from rocket and extract angular velocity, inertial components, and torque components
-        self.times = []
-        self.verticalVelocities = []
-        self.masses = []
-        self.thrusts = []
-        self.dragForces = []
-        self.dragCoefficients = []
-        self.airTemperatures = []
-        self.airPressures = []
-        with open(self.filePath, "r", newline="") as file:
-            reader = csv.reader(file, delimiter=",")
-            for row in reader:
-                if row[0][0] != '#':
-                    self.times.append(row[0])
-                    self.verticalVelocities.append(row[1])
-                    self.masses.append(row[2])
-                    self.thrusts.append(row[3])
-                    self.dragForces.append(row[4])
-                    self.dragCoefficients.append(row[5])
-                    self.airTemperatures.append(row[6])
-                    self.airPressures.append(row[7])
-            return self.times, self.verticalVelocities, self.masses, self.thrusts, self.dragForces, self.dragCoefficients, self.airTemperatures, self.airPressures
-    
-    def calculateDrag_v(self, time):
-        GASCONSTANT = 287.052874
-        index = self.times.index(time)
-        verticalVelocity = self.verticalVelocities[index]
-        dragForce = self.dragForces[index]
-        dragCoefficient = self.dragCoefficients[index]
-        airTemperature = self.airTemperatures[index]
-        airPressure = self.airPressures[index]
-        
-        airDensity = airPressure/(airTemperature*GASCONSTANT)
-        area = (2*dragForce)/(airDensity*dragCoefficient*(verticalVelocity**2))
-        drag_v = airDensity*verticalVelocity*dragCoefficient*area
-        return drag_v
+    def getConstants(self, time):
+        constants = dict()
+        Inertia = np.array([3,3,0.0025])
+        constants["Fin Moments"] = np.array([0.003,0.003,0.003])
+        constants["correctiveConstants"] = 1
+
+        if(time > 2):
+            constants["Mass"] = 2.259
+            Inertia[0] = 0.0025
+            Inertia[1] = 0.0025
+            constants["DragCoeff"] = 0.547 + 0.00473* time + 0.00805 * time * time
+
+        else:
+            constants["Mass"] = 2.875
+            longI  = 0.32 + (0.32 - 0.28) * (-1 * time) * 0.5
+            Inertia[0] = longI
+            Inertia[1] = longI
+            constants["DragCoeff"] = 0.604 - 0.0132* time + 0.00107 * time * time - 0.0000301 * time * time * time
+
+
+
+        constants["Inertias"] = Inertia
+        return constants
 
 
     def aLambdaFunc(self, x, FinMoments,Mk, Dk , mass ,inertias):
@@ -81,45 +64,68 @@ class state:
         return J
 
     
-    def calculateMoments(velocities, alphas):
-        #Fill in once amruth gives me STUFF
-        return np.array([1,2,3])
+    def calculateMoments(self, velocities, alphas):
+        Mx = 0.5 *( alphas[0] + alphas[2])
+        My =  0.5*( alphas[1] + alphas[3])
+        Mz = 0.5 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
+        return np.array([Mx, My, Mz])
 
-    def calculateBFunctional(x, alphas, inertias, self):
+    def calculateBFunctional(self, alphas, x, inertias):
         moments = self.calculateMoments(np.array([x[3], x[4], x[5]]), alphas)
         w1Dot = moments[0]/inertias[0]
         w2Dot = moments[1]/inertias[1]
         w3Dot = moments[2]/inertias[2]
-
-        return (w1Dot, w2Dot, w3Dot, 0,0,0)
+        return (w1Dot, w2Dot, w3Dot,w1Dot * 1e-8,w2Dot * 1e-8,w3Dot * 1e-8)
     
-    def calculateBNew(alphas, constants, self):
-        inputsWrapped = lambda x : self.calculateBFunctional(x, alphas, constants["Inertias"], self)
+    def calculateBNew(self, alphas, constants, state):
+        inputsWrapped = lambda alpha : self.calculateBFunctional(alpha, state, constants["Inertias"])
         epsilon = 1e-6
-        defaultAngles = np.array([0,0,0,0])
-        J = approx_fprime(defaultAngles, inputsWrapped, epsilon)
+        J = approx_fprime(alphas, inputsWrapped, epsilon)
         return J
-
-    def getState(self, time):
-        index = self.times.index(time)
-        verticalVelocity = self.verticalVelocities[index]
         
-        currentState = [
-            self.angular[0],
-            self.angular[1],
-            self.angular[2],
-            0,
-            0,
-            verticalVelocity
-            ]
-        return currentState
+    def getU(self,time, state, constants, oldAngles):
+        print(state)
+        if(time < 2):
+            return [0,0,0,0]
+            # ourState = np.array([state[3], state[4], state[5], state[10], state[11], state[12]])
+        AMatrix = self.calculateANew(constants, state)
+        BMatrix = self.calculateBNew(oldAngles, constants,state)
 
-        
+        Qmatrix = np.eye(6)
+        Qmatrix[3][3] = 1e-6
+        Qmatrix[4][4] = 1e-6
+        Qmatrix[5][5] = 1e-6
+
+        Rmatrix = np.eye(4)
+
+        # print(AMatrix)
+        # print(BMatrix)
+        try:
+            P = linalg.solve_continuous_are(AMatrix, BMatrix, Qmatrix, Rmatrix) 
+            K = linalg.inv(Rmatrix) @ BMatrix.T @ P
+        except Exception as e:
+            print("❌ CARE solve failed:", e)
+            return [0, 0, 0, 0]
+
+        #u = kx
+        for i in range(3):
+            for j in range(4):
+                K[j][i + 3] = 0
+        u = K @ state
+
+        print(K)
+        print("Time is " + str(time))
+        print(u)
+        return u
+
+
+
+
 
 def symPyJacobian():
     w1, w2, w3, v1, v2, v3 = sp.symbols('w1 w2 w3 v1 v2 v3')
     fMx, fMy, fMz = sp.symbols("fMx fMy fMz")
-    Mk, Dk, mass = sp.symbols("Mk Dk mass")
+    Mk, Dk, mass = sp.symbols("Mk Dk mass") 
     I1, I2, I3 = sp.symbols("I1 I2 I3")
 
 
@@ -140,15 +146,6 @@ def symPyJacobian():
 
 
 
-def jacobian():
-    angular = [0, 0, 0]
-    torques = [0, 0, 0]
-    inertias = [0, 0, 0]
-    filePath = "flightVehicleDataV3.csv"
-
-    rocket = state(angular, torques, inertias, filePath)
-    symPyJacobian()
-
 # constants = dict()
 # constants["Fin Moments"] = np.array([3,3,3])
 # constants["correctiveConstants"] = 10
@@ -159,7 +156,6 @@ def jacobian():
 # Jacobian = rocket.calculateANew(constants, stateGuy)
 
 # print(Jacobian)
-
 
 
 

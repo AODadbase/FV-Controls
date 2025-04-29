@@ -1,18 +1,48 @@
 import datetime
+import numpy as np
+from scipy import linalg
+
 from rocketpy import Environment, SolidMotor, Rocket, Flight
+from OurFin import ourFins
+from rocketpy.control.controller import _Controller
+from eulerEquations import PhysicsCalc
 
-print("HELLO!")
-env = Environment(latitude=41.92298772007185, longitude=-88.06013490408121, elevation=243.43)
-tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+def generateConstants():
+    constants = 1
+    return constants
 
-env.set_date(
-    (tomorrow.year, tomorrow.month, tomorrow.day, 12)
-)  # Hour given in UTC time
-env.set_atmospheric_model(type="Forecast", file="GFS")
+def rollControlFunction(
+    time, sampling_rate, state, state_history, observed_variables, finTabs
+):
+    if(time < 2):
+        return
+    ABCalculator = PhysicsCalc()
+    constants = ABCalculator.getConstants(time)
 
-#env.info()
+    # constants = generateConstants()
+    ourState = np.array([state[10], state[11], state[12], state[3], state[4], state[5]])
+    oldAngles = finTabs.aileronAngles
+    finTabs.aileronAngles = ABCalculator.getU(time, ourState, constants, oldAngles)
 
-ourMOtor = SolidMotor(
+    return (
+        time,
+        finTabs.aileronAngles   
+    )
+
+
+
+
+def makeOurRocket(samplingRate):
+    coolRocket = Rocket(
+        radius=7.87/200,
+        mass=2.259,
+        inertia=(0.28, 0.002940, 0.002940),
+        power_off_drag=0.560,
+        power_on_drag=0.580,
+        center_of_mass_without_motor=0.669,
+        coordinate_system_orientation="tail_to_nose",
+    )
+    ourMOtor = SolidMotor(
     thrust_source="C:\\Users\\alber\\Documents\\GitHub\\FV-Controls\\Kalman\\AeroTech_HP-I280DM.eng",  # Or use a CSV thrust file
     dry_mass=(0.616 - 0.355),  # kg
     burn_time=1.9,  # Corrected burn time
@@ -30,49 +60,71 @@ ourMOtor = SolidMotor(
     nozzle_position=-0.3,
     throat_radius= 3.5 / 1000,  # 5.5 mm = 0.0055 m
     coordinate_system_orientation="nozzle_to_combustion_chamber",
-)
+    )
+    coolRocket.add_motor(ourMOtor, position=0.01*(117-86.6))
+    nose_cone = coolRocket.add_nose(
+        length=0.19, kind="lvhaack", position=0.01*(117-0.19)
+    )
+    tail = coolRocket.add_tail(
+        top_radius=0.0787/2, bottom_radius=0.0572/2, length=0.0381, position=.0381
+    )
 
-#ourMOtor.info()
+    ourNewFins = ourFins(
+        n=4,
+        root_chord=0.203,
+        tip_chord=0.0762,
+        span=0.0737,
+        rocket_radius = 7.87/200,
+        cant_angle=0.1,
+        sweep_angle=62.8
+    )
+    ourController = _Controller(
+        interactive_objects= ourNewFins,
+        controller_function= rollControlFunction,
+        sampling_rate= samplingRate,
+        name="KRONOS",
+    )
+
+    coolRocket.add_surfaces(ourNewFins, 0.01*(117-92.7))
+    coolRocket._add_controllers(ourController)
+    return coolRocket, ourController
 
 
-coolRocket = Rocket(
-    radius=7.87/200,
-    mass=2.259,
-    inertia=(0.28, 0.002940, 0.002940),
-    power_off_drag=0.560,
-    power_on_drag=0.580,
-    center_of_mass_without_motor=0.669,
-    coordinate_system_orientation="tail_to_nose",
-)
 
-coolRocket.add_motor(ourMOtor, position=0.01*(117-86.6))
 
-nose_cone = coolRocket.add_nose(
-    length=0.19, kind="lvhaack", position=0.01*(117-0.19)
-)
 
-fin_set = coolRocket.add_trapezoidal_fins(
-    n=4,
-    root_chord=0.203,
-    tip_chord=0.0762,
-    span=0.0737,
-    position=0.01*(117-92.7),
-    cant_angle=0,
-    sweep_angle=62.8
-)
+#Initializing the rocket simulation
+print("HELLO!")
+env = Environment(latitude=41.92298772007185, longitude=-88.06013490408121, elevation=243.43)
+tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+env.set_date((tomorrow.year, tomorrow.month, tomorrow.day, 12))  
+env.set_atmospheric_model(type="Forecast", file="GFS")
 
-tail = coolRocket.add_tail(
-    top_radius=0.0787/2, bottom_radius=0.0572/2, length=0.0381, position=.0381
-)
+coolRocket, ourController = makeOurRocket(100)
+
+
+
 
 
 
 #coolRocket.draw()
 #coolRocket.plots.static_margin()
-
 #coolRocket.all_info()
 
+
+
+
+#Test Flight
 test_flight = Flight(
     rocket=coolRocket, environment=env, rail_length=5.2, inclination=85, heading=0
     )
 test_flight.info()
+
+#https://github.com/RocketPy-Team/RocketPy/blob/master/rocketpy/control/controller.py
+# Rocket py controller class, so that you can control stuff
+
+#https://docs.rocketpy.org/en/latest/reference/classes/aero_surfaces/Fins.html
+#Fins.roll_parameters (list) – List containing the roll moment lift coefficient, 
+#the roll moment damping coefficient and the cant angle in radians.
+
+#can create a custom fin class, and change the moments, I think then I can make a controller object
