@@ -23,21 +23,21 @@
 
   <link name="ground">
     <inertial>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-25 -25 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-25 -25 0"/>
       <geometry>
-  			<mesh filename="ground.stl" scale="25 5 1"/>
+  			<mesh filename="ground.stl" scale="100 100 1"/>
       </geometry>
       <material name="harvest"/>
     </visual>
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-6.25 -6.25 0"/>
       <geometry>
-  			<mesh filename="ground.stl" scale="25 5 1"/>
+  			<mesh filename="ground.stl" scale="100 100 1"/>
       </geometry>
     </collision>
   </link>

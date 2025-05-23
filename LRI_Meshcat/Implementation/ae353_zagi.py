@@ -37,6 +37,12 @@ class Simulator:
         self.delta_r = 0.
         self.delta_l = 0.
 
+        # Aileron angles
+        self.delta_1 = 0.
+        self.delta_2 = 0.
+        self.delta_3 = 0.
+        self.delta_4 = 0.
+
         # Parameters
         self.initial_airspeed = 5.
         self.maximum_initial_airspeed_error = maximum_initial_airspeed_error
@@ -135,11 +141,11 @@ class Simulator:
             flags=(self.bullet_client.URDF_USE_INERTIA_FROM_FILE),
             useFixedBase=1,
         )
-        # make transparent
+        # Grey #504f58
         self.bullet_client.changeVisualShape(
             objectUniqueId=self.platform_id,
             linkIndex=-1,  # base link
-            rgbaColor=[1.0, 1.0, 1.0, 0.3]  # RGB + Alpha (0.3 = mostly transparent)
+            rgbaColor = [80/255, 79/255, 88/255, 1.0]
         )
         
         # Load robot
@@ -148,11 +154,11 @@ class Simulator:
             basePosition=np.array([0., 0., 0.]),
             baseOrientation=self.bullet_client.getQuaternionFromEuler([0., -np.pi/2, 0.]),
             flags=(self.bullet_client.URDF_USE_INERTIA_FROM_FILE  ))
-        # make transparent
+        # Purple #200e45
         self.bullet_client.changeVisualShape(
             objectUniqueId=self.robot_id,
             linkIndex=-1,  # base link
-            rgbaColor=[1.0, 1.0, 1.0, 0.3]  # RGB + Alpha (0.3 = mostly transparent)
+            rgbaColor = [75/255, 47/255, 174/255, 1.0]  # Medium Purple #4B2FAE  # Lighter Purple #7D5FFF
         )
         # Set contact and damping parameters
         for object_id in [self.robot_id]:
@@ -169,6 +175,12 @@ class Simulator:
                     linearDamping=0.,
                     angularDamping=0.,
                 )
+        # # Maybe need??? temp comment out to make ailerons appear in correct place
+
+        # self.joint_name_to_index = {
+        #     self.bullet_client.getJointInfo(self.robot_id, i)[1].decode(): i
+        #     for i in range(self.bullet_client.getNumJoints(self.robot_id))
+        # }
 
         # Initialize meshcat if necessary
         if self.display_meshcat:
@@ -244,6 +256,30 @@ class Simulator:
 
         return self.delta_r, self.delta_l
     
+    # MY ADDED FUNCTION FOR AILERONS
+    def set_actuator_commands_aileron(
+            self,
+            delta_1_command,
+            delta_2_command,
+            delta_3_command,
+            delta_4_command,
+        ):
+
+        if not np.isscalar(delta_1_command):
+            raise Exception('delta_1_command must be a scalar')
+        if not np.isscalar(delta_2_command):
+            raise Exception('delta_2_command must be a scalar')
+        if not np.isscalar(delta_3_command):
+            raise Exception('delta_3_command must be a scalar')
+        if not np.isscalar(delta_4_command):
+            raise Exception('delta_4_command must be a scalar')
+        self.delta_1 = np.clip(delta_1_command, -self.maximum_elevon_deflection, self.maximum_elevon_deflection)
+        self.delta_2 = np.clip(delta_2_command, -self.maximum_elevon_deflection, self.maximum_elevon_deflection)
+        self.delta_3 = np.clip(delta_3_command, -self.maximum_elevon_deflection, self.maximum_elevon_deflection)
+        self.delta_4 = np.clip(delta_4_command, -self.maximum_elevon_deflection, self.maximum_elevon_deflection)
+
+        return self.delta_1, self.delta_2, self.delta_3, self.delta_4
+    
     def reset(
             self,
             initial_conditions=None,
@@ -313,6 +349,12 @@ class Simulator:
         # Set elevon angles
         self.delta_r = 0.
         self.delta_l = 0.
+
+        # Set aileron angles
+        self.delta_1 = 0.
+        self.delta_2 = 0.
+        self.delta_3 = 0.
+        self.delta_4 = 0.
         
         # Update display
         self._update_display()
@@ -344,6 +386,14 @@ class Simulator:
             'delta_l_command': [],
             'delta_r': [],
             'delta_l': [],
+            'delta_1_command': [],
+            'delta_2_command': [],
+            'delta_3_command': [],
+            'delta_4_command': [],
+            'delta_1': [],
+            'delta_2': [],
+            'delta_3': [],
+            'delta_4': [],
             'f_x': [],
             'f_y': [],
             'f_z': [],
@@ -428,6 +478,7 @@ class Simulator:
 
         return data
 
+    # New aerodynamic forces function required for the four ailerons on rocket
     def get_aerodynamic_forces_numeric(self, u, v, w, p, q, r, delta_r, delta_l, params):
         # Define parameters
         rho, S, c, b, g = params['rho'], params['S'], params['c'], params['b'], params['g']
@@ -487,6 +538,13 @@ class Simulator:
 
         # Apply the actuator commands
         delta_r, delta_l = self.set_actuator_commands(delta_r_command, delta_l_command)
+
+        # Apply the aileron commands
+        delta_1_command, delta_2_command, delta_3_command, delta_4_command = controller.run(
+            self.t,
+            p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z,
+        )
+        delta_1, delta_2, delta_3, delta_4 = self.set_actuator_commands_aileron(delta_1_command, delta_2_command, delta_3_command, delta_4_command)
         
         # Get aerodynamic forces and torques
         f_x, f_y, f_z, tau_x, tau_y, tau_z = self.get_aerodynamic_forces_numeric(
@@ -526,8 +584,22 @@ class Simulator:
         self.data['w_z'].append(w_z)
         self.data['delta_r_command'].append(delta_r_command)
         self.data['delta_l_command'].append(delta_l_command)
+
+        # MY ADDED LOGGING FOR AILERONS
+        self.data['delta_1_command'].append(delta_1_command)
+        self.data['delta_2_command'].append(delta_2_command)
+        self.data['delta_3_command'].append(delta_3_command)
+        self.data['delta_4_command'].append(delta_4_command)
+
         self.data['delta_r'].append(delta_r)
         self.data['delta_l'].append(delta_l)
+
+        # MY ADDED LOGGING FOR AILERONS
+        self.data['delta_1'].append(delta_1)
+        self.data['delta_2'].append(delta_2)
+        self.data['delta_3'].append(delta_3)
+        self.data['delta_4'].append(delta_4)
+
         self.data['f_x'].append(f_x)
         self.data['f_y'].append(f_y)
         self.data['f_z'].append(f_z)
@@ -553,6 +625,17 @@ class Simulator:
 
         # Increment time step
         self.time_step += 1
+
+        # In your simulation step/controller:
+        desired_angles = [self.delta_1, self.delta_2, self.delta_3, self.delta_4]  # radians
+        for i, joint_name in enumerate(['aileron1_joint', 'aileron2_joint', 'aileron3_joint', 'aileron4_joint']):
+            joint_index = self.joint_name_to_index[joint_name]
+            self.bullet_client.setJointMotorControl2(
+                self.robot_id,
+                joint_index,
+                self.bullet_client.POSITION_CONTROL,
+                targetPosition=desired_angles[i]
+            )
 
         return all_done
     
@@ -582,7 +665,7 @@ class Simulator:
                 x, y, z = pos
                 y *= -1
                 z *= -1
-                self.vis.set_cam_pos([x - 1.5, y, z + 0.5])
+                self.vis.set_cam_pos([x - 4, y - 2.5, z])
                 self.vis.set_cam_target([x, y, z])
 
             self.meshcat_update()
@@ -730,10 +813,10 @@ class Simulator:
             )
         )
 
-        # Add right elevon
-        color = self._convert_color(colors['heritage-orange'])
-        self.vis['robot']['elevon-right'].set_object(
-            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/Aileron.stl'))),
+        # Add first aileron
+        color = self._convert_color([10/255, 116/255, 150/255, 1.0])  # Teal #0A7496
+        self.vis['robot']['aileron1'].set_object(
+            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/aileron1.stl'))),
             meshcat.geometry.MeshPhongMaterial(
                 color=color['color'],
                 transparent=color['transparent'],
@@ -742,10 +825,31 @@ class Simulator:
             )
         )
 
-        # Add left elevon
-        color = self._convert_color(colors['heritage-orange'])
-        self.vis['robot']['elevon-left'].set_object(
-            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/Aileron.stl'))),
+        # Add second aileron
+        self.vis['robot']['aileron2'].set_object(
+            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/aileron2.stl'))),
+            meshcat.geometry.MeshPhongMaterial(
+                color=color['color'],
+                transparent=color['transparent'],
+                opacity=color['opacity'],
+                reflectivity=0.8,
+            )
+        )
+        
+        # Add third aileron
+        self.vis['robot']['aileron3'].set_object(
+            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/aileron3.stl'))),
+            meshcat.geometry.MeshPhongMaterial(
+                color=color['color'],
+                transparent=color['transparent'],
+                opacity=color['opacity'],
+                reflectivity=0.8,
+            )
+        )
+
+        # Add fourth aileron
+        self.vis['robot']['aileron4'].set_object(
+            meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/aileron4.stl'))),
             meshcat.geometry.MeshPhongMaterial(
                 color=color['color'],
                 transparent=color['transparent'],
@@ -793,3 +897,23 @@ class Simulator:
         # T = meshcat.transformations.translation_matrix([-0.23404, -0.15886, 0.008353])
         # R = meshcat.transformations.rotation_matrix(self.delta_l, [0.37352883778028634, 0.9275991332385393, 0.006004611695959905])
         # self.vis['robot']['elevon-left'].set_transform(T @ R)
+
+        # FIXME: Commented out because it was causing ailerons to not appear in correct place, fix later
+        # import meshcat.transformations as tf
+
+        # joint_origins = [
+        #     ([0.5, 0.3, 0.0], [0, 0, 0]),         # aileron1
+        #     ([0.5, -0.3, 0.0], [0, 0, 3.1416]),   # aileron2
+        #     ([-0.5, 0.0, 0.0], [0, 0, 1.5708]),   # aileron3
+        #     ([0.0, 0.5, 0.0], [0, 0, -1.5708]),   # aileron4
+        # ]
+
+        # for i, joint_name in enumerate(['aileron1_joint', 'aileron2_joint', 'aileron3_joint', 'aileron4_joint']):
+        #     joint_index = self.joint_name_to_index[joint_name]
+        #     joint_state = self.bullet_client.getJointState(self.robot_id, joint_index)
+        #     joint_angle = joint_state[0]
+        #     xyz, rpy = joint_origins[i]
+        #     T_origin = tf.compose_matrix(translate=xyz, angles=rpy)
+        #     T_joint = tf.rotation_matrix(joint_angle, [0, 1, 0])
+        #     T = tf.concatenate_matrices(T_origin, T_joint)
+        #     self.vis['robot'][f'aileron{i+1}'].set_transform(T)

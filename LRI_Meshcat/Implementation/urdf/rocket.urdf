@@ -33,19 +33,19 @@
     </inertial>
   </link>
 
-  <!-- Right Aileron -->
-  <link name="aileron_right">
+  <!-- First Aileron (e.g., right, +Y) -->
+  <link name="aileron1">
     <visual>
-      <origin xyz="0.5 -0.3 0.0" rpy="0 0 0"/> <!-- Adjust xyz to actual location -->
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="Aileron.stl"/>
+        <mesh filename="aileron1.stl"/>
       </geometry>
       <material name="heritage-orange"/>
     </visual>
     <collision>
-      <origin xyz="0.5 -0.3 0.0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="Aileron.stl"/>
+        <mesh filename="aileron1.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -54,28 +54,27 @@
       <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
     </inertial>
   </link>
-
-  <joint name="right_aileron_joint" type="revolute">
+  <joint name="aileron1_joint" type="revolute">
     <parent link="base"/>
-    <child link="aileron_right"/>
-    <origin xyz="0.5 -0.3 0.0" rpy="0 0 0"/> <!-- Same as aileron_right origin -->
-    <axis xyz="0 1 0"/> <!-- Adjust axis as needed (here, rotate about y) -->
+    <child link="aileron1"/>
+    <origin xyz="0.5 0.3 0.0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
     <limit lower="-0.5" upper="0.5" effort="1" velocity="1"/>
   </joint>
 
-  <!-- Left Aileron -->
-  <link name="aileron_left">
+  <!-- Second Aileron (e.g., left, -Y) -->
+  <link name="aileron2">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 3.1416"/> <!-- Adjust xyz to actual location -->
+      <origin xyz="0 0 0" rpy="0 0 3.1416"/>
       <geometry>
-        <mesh filename="Aileron.stl"/>
+        <mesh filename="aileron2.stl"/>
       </geometry>
       <material name="heritage-orange"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 3.1416"/>
       <geometry>
-        <mesh filename="Aileron.stl"/>
+        <mesh filename="aileron2.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -84,12 +83,69 @@
       <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
     </inertial>
   </link>
-
-  <joint name="left_aileron_joint" type="revolute">
+  <joint name="aileron2_joint" type="revolute">
     <parent link="base"/>
-    <child link="aileron_left"/>
-    <origin xyz="0 0 0" rpy="0 0 3.1416"/> <!-- Same as aileron_left origin -->
-    <axis xyz="0 1 0"/> <!-- Adjust axis as needed (here, rotate about y) -->
+    <child link="aileron2"/>
+    <origin xyz="0.5 -0.3 0.0" rpy="0 0 3.1416"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5" upper="0.5" effort="1" velocity="1"/>
+  </joint>
+
+  <!-- Third Aileron (e.g., top, -X) -->
+  <link name="aileron3">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <geometry>
+        <mesh filename="aileron3.stl"/>
+      </geometry>
+      <material name="heritage-orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <geometry>
+        <mesh filename="aileron3.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="aileron3_joint" type="revolute">
+    <parent link="base"/>
+    <child link="aileron3"/>
+    <origin xyz="-0.5 0.0 0.0" rpy="0 0 1.5708"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5" upper="0.5" effort="1" velocity="1"/>
+  </joint>
+
+  <!-- Fourth Aileron (e.g., bottom, +X) -->
+  <link name="aileron4">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="aileron4.stl"/>
+      </geometry>
+      <material name="heritage-orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="aileron4.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="aileron4_joint" type="revolute">
+    <parent link="base"/>
+    <child link="aileron4"/>
+    <origin xyz="0.0 0.5 0.0" rpy="0 0 -1.5708"/>
+    <axis xyz="0 1 0"/>
     <limit lower="-0.5" upper="0.5" effort="1" velocity="1"/>
   </joint>
 </robot>
