@@ -58,22 +58,27 @@ class ourFins(TrapezoidalFins):
         M3 = M3 + self.computeAileronMoment(stream_velocity)
         otherM = self.computeOtherAileronMoment(stream_velocity)
         M2 = M2 + otherM[1]
-        M1 = M1 + otherM[0]
+        M1 = M1 + otherM[1]
         
-        print("The not roll moment is " + str(M2))
-        print("The roll moment is " + str(M3))
+        # print("The not roll moment is " + str(M2))
+        #print("The roll moment is " + str(M3))
 
         return R1, R2, R3, M1, M2, M3
 
     def computeAileronMoment(self, stream_velocity):
+        vScale = np.sqrt(np.dot(stream_velocity,stream_velocity))/210
+
         alphas = self.aileronAngles
         # 1000 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
-        return  0.05 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
+        # return  0.02 * (alphas[1] + alphas[3] - alphas[2] - alphas [0]) * vScale
+        return  1 * (alphas [0]) * vScale * vScale
 
     def computeOtherAileronMoment(self, stream_velocity):
+        vScale = np.sqrt(np.dot(stream_velocity,stream_velocity))/210
+
         alphas = self.aileronAngles
         # 1000 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
-        Mx = 0.5 *( alphas[0] + alphas[2])
-        My =  0.5*( alphas[1] + alphas[3])
-
+        Mx = 0.5 *( alphas[0] + alphas[2])* vScale * vScale
+        My =  0.5*( alphas[1] + alphas[3])* vScale * vScale
+        
         return  [Mx, My]

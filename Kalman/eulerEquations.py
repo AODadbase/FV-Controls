@@ -65,9 +65,15 @@ class PhysicsCalc:
 
     
     def calculateMoments(self, velocities, alphas):
-        Mx = 0.5 *( alphas[0] + alphas[2])
-        My =  0.5*( alphas[1] + alphas[3])
-        Mz = 0.5 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
+        vScale = np.sqrt(np.dot(velocities,velocities))/210
+        # Mx = 0.5 *( alphas[0] + alphas[2]) * vScale
+        # My =  0.5*( alphas[1] + alphas[3]) * vScale
+        
+        # Mz = 0.02 * (alphas[1] + alphas[3] - alphas[2] - alphas [0]) * vScale
+        Mx = 0.5 *( alphas[0]) * vScale * vScale
+        My = 0
+        Mz = 1 * (alphas [0]) * vScale * vScale
+
         return np.array([Mx, My, Mz])
 
     def calculateBFunctional(self, alphas, x, inertias):
@@ -84,9 +90,9 @@ class PhysicsCalc:
         return J
         
     def getU(self,time, state, constants, oldAngles):
-        print(state)
-        if(time < 2):
-            return [0,0,0,0]
+        # print(state)
+        # if(time < 1):
+        #     return [0,0,0,0]
             # ourState = np.array([state[3], state[4], state[5], state[10], state[11], state[12]])
         AMatrix = self.calculateANew(constants, state)
         BMatrix = self.calculateBNew(oldAngles, constants,state)
@@ -95,27 +101,41 @@ class PhysicsCalc:
         Qmatrix[3][3] = 1e-6
         Qmatrix[4][4] = 1e-6
         Qmatrix[5][5] = 1e-6
+        Qmatrix[0][0] = 1e-6
+        Qmatrix[1][1] = 1e-6
+        Qmatrix[2][2] = 100
 
-        Rmatrix = np.eye(4)
+        Rmatrix = 1/(0.13962634016**2) *  np.eye(4)
 
         # print(AMatrix)
         # print(BMatrix)
-        try:
-            P = linalg.solve_continuous_are(AMatrix, BMatrix, Qmatrix, Rmatrix) 
-            K = linalg.inv(Rmatrix) @ BMatrix.T @ P
-        except Exception as e:
-            print("❌ CARE solve failed:", e)
-            return [0, 0, 0, 0]
+        # try:
+        #     P = linalg.solve_continuous_are(AMatrix, BMatrix, Qmatrix, Rmatrix) 
+        #     K = linalg.inv(Rmatrix) @ BMatrix.T @ P
+        #     print(K)
+        # except Exception as e:
+        #     print("❌ CARE solve failed:", e)
+        #     return [0, 0, 0, 0]
 
-        #u = kx
-        for i in range(3):
-            for j in range(4):
-                K[j][i + 3] = 0
-        u = K @ state
+        K = np.array([[0,0,10,0,0,0],
+                     [0,0,0,0,0,0],
+                     [0,0,0,0,0,0],
+                     [0,0,0,0,0,0]])
 
-        print(K)
-        print("Time is " + str(time))
-        print(u)
+        #u = -kx
+        # for i in range(3):
+        #     for j in range(4):
+        #         K[j][i + 3] = 0
+        u = -1 * K @ state
+
+        # print(K)
+        # print("Time is " + str(time))
+        # print(u)
+        i = 0
+        for val in u:
+            if(np.abs(val) > 8 * np.pi/180):
+                u[i] = np.sign(val) * 8 * np.pi/180
+            i = i + 1
         return u
 
 

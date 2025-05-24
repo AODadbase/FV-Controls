@@ -6,7 +6,7 @@ from rocketpy import Environment, SolidMotor, Rocket, Flight
 from OurFin import ourFins
 from rocketpy.control.controller import _Controller
 from eulerEquations import PhysicsCalc
-
+import matplotlib.pyplot as plt
 def generateConstants():
     constants = 1
     return constants
@@ -14,8 +14,6 @@ def generateConstants():
 def rollControlFunction(
     time, sampling_rate, state, state_history, observed_variables, finTabs
 ):
-    if(time < 2):
-        return
     ABCalculator = PhysicsCalc()
     constants = ABCalculator.getConstants(time)
 
@@ -23,7 +21,8 @@ def rollControlFunction(
     ourState = np.array([state[10], state[11], state[12], state[3], state[4], state[5]])
     oldAngles = finTabs.aileronAngles
     finTabs.aileronAngles = ABCalculator.getU(time, ourState, constants, oldAngles)
-
+    print("The aileron angles are: "  + str(finTabs.aileronAngles))
+    # finTabs.aileronAngles = np.array([0,0,0,0])
     return (
         time,
         finTabs.aileronAngles   
@@ -75,7 +74,7 @@ def makeOurRocket(samplingRate):
         tip_chord=0.0762,
         span=0.0737,
         rocket_radius = 7.87/200,
-        cant_angle=0.1,
+        cant_angle=0.01,
         sweep_angle=62.8
     )
     ourController = _Controller(
@@ -119,6 +118,18 @@ test_flight = Flight(
     rocket=coolRocket, environment=env, rail_length=5.2, inclination=85, heading=0
     )
 test_flight.info()
+test_flight.plots.angular_kinematics_data()
+
+test_flight.export_data(
+    "testing.csv",
+    "w1",
+    "w2",
+    "w3",
+    "alpha1",
+    "alpha2",
+    "alpha3",
+
+)
 
 #https://github.com/RocketPy-Team/RocketPy/blob/master/rocketpy/control/controller.py
 # Rocket py controller class, so that you can control stuff
@@ -128,3 +139,6 @@ test_flight.info()
 #the roll moment damping coefficient and the cant angle in radians.
 
 #can create a custom fin class, and change the moments, I think then I can make a controller object
+
+
+##I COMMENTED OUT THE CONTROLLER AND COMMENTED OUT THE PHYSICS CHANGES IN OURFIN
