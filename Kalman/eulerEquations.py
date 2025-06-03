@@ -8,6 +8,9 @@ class PhysicsCalc:
     def __init__(self):
         self.poop = 1
 
+    #Returns constants, some of this isn't real values
+    #Fin moments aren't real values
+    #Drag coffecients and inertias are from openrocket, as a function of time
     def getConstants(self, time):
         constants = dict()
         Inertia = np.array([3,3,0.0025])
@@ -32,7 +35,8 @@ class PhysicsCalc:
         constants["Inertias"] = Inertia
         return constants
 
-
+    #This is the lambda fucntion for calculating the A matrix
+    # Takes in x and returns xdot in xdot = Ax
     def aLambdaFunc(self, x, FinMoments,Mk, Dk , mass ,inertias):
         #x = (w1, w2, w3, v1, v2, v3)
         velo = np.array([x[3], x[4], x[5]])
@@ -45,12 +49,13 @@ class PhysicsCalc:
         w1Dot = (1/inertias[0]) *((inertias[2] - inertias[1]) * x[2]*x[1] + (correctiveCoeff * x[0]) + FinMoments[0])
         w2Dot = (1/inertias[1]) * ((inertias[2] - inertias[0])*x[0]*x[2] + (correctiveCoeff*x[1]) + FinMoments[1])
         w3Dot = (1/inertias[2]) * ((inertias[0] - inertias[1]) *x[0]*x[1] + FinMoments[2])
-        v1Dot = (Dk * vmag * x[3])/mass
-        v2Dot = (Dk * vmag * x[4])/mass
-        v3Dot = (Dk * vmag * x[5])/mass - 9.8
+        v1Dot = -(Dk * vmag * x[3])/mass
+        v2Dot = -(Dk * vmag * x[4])/mass
+        v3Dot = -(Dk * vmag * x[5])/mass - 9.8
 
         return np.array([w1Dot, w2Dot,w3Dot, v1Dot, v2Dot, v3Dot ])
     
+    #Uses the aLambdaFunc to calculate A using a lambda function
     def calculateANew(self, constants, state):
         FinMoments = constants["Fin Moments"]
         Mk = constants["correctiveConstants"]
@@ -63,7 +68,7 @@ class PhysicsCalc:
         J = approx_fprime(state, physicsWrapped, epsilon)
         return J
 
-    
+    #Calculates the 
     def calculateMoments(self, velocities, alphas):
         vScale = np.sqrt(np.dot(velocities,velocities))/210
         # Mx = 0.5 *( alphas[0] + alphas[2]) * vScale

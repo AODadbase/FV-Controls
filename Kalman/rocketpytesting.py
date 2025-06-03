@@ -7,10 +7,15 @@ from OurFin import ourFins
 from rocketpy.control.controller import _Controller
 from eulerEquations import PhysicsCalc
 import matplotlib.pyplot as plt
+
+
+#No constants in yet (I forgot what goes for)
 def generateConstants():
     constants = 1
     return constants
 
+#This is the controller that the rocket uses
+#Every timestep rollControlFunction is called which will update the aileron angles using Physics Calc
 def rollControlFunction(
     time, sampling_rate, state, state_history, observed_variables, finTabs
 ):
@@ -30,7 +35,8 @@ def rollControlFunction(
 
 
 
-
+#Makes a rocket with rocket py
+#Values are taken from open rocket
 def makeOurRocket(samplingRate):
     coolRocket = Rocket(
         radius=7.87/200,
