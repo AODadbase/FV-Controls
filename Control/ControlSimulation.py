@@ -6,25 +6,26 @@ from scipy import linalg
 
 class PhysicsCalc:
     def __init__(self):
-        self.poop = 1
-
+        self.something = 1
     #Returns constants, some of this isn't real values
     #Fin moments aren't real values
     #Drag coffecients and inertias are from openrocket, as a function of time
+
+    #CHECK ALL VALUES!!!!!!!!!!!!!!!!!!
     def getConstants(self, time):
         constants = dict()
         Inertia = np.array([3,3,0.0025])
-        constants["Fin Moments"] = np.array([0.003,0.003,0.003])
+        constants["Fin Moments"] = np.array([0.003,0.003,0.003]) #Fin misalignment from open rocket
         constants["correctiveConstants"] = 1
 
         if(time > 2):
-            constants["Mass"] = 2.259
+            constants["Mass"] = 2.875
             Inertia[0] = 0.0025
             Inertia[1] = 0.0025
             constants["DragCoeff"] = 0.547 + 0.00473* time + 0.00805 * time * time
 
         else:
-            constants["Mass"] = 2.875
+            constants["Mass"] = 2.259
             longI  = 0.32 + (0.32 - 0.28) * (-1 * time) * 0.5
             Inertia[0] = longI
             Inertia[1] = longI
@@ -35,7 +36,7 @@ class PhysicsCalc:
         constants["Inertias"] = Inertia
         return constants
 
-    #This is the lambda fucntion for calculating the A matrix
+    #This is a helper fucntion for calculating the A matrix
     # Takes in x and returns xdot in xdot = Ax
     def aLambdaFunc(self, x, FinMoments,Mk, Dk , mass ,inertias):
         #x = (w1, w2, w3, v1, v2, v3)
@@ -65,8 +66,9 @@ class PhysicsCalc:
         
         physicsWrapped = lambda x : self.aLambdaFunc(x,FinMoments, Mk, Dk, mass, inertias)
         epsilon = 1e-6
-        J = approx_fprime(state, physicsWrapped, epsilon)
-        return J
+        #approx_fprim calculates the jacobian
+        A = approx_fprime(state, physicsWrapped, epsilon)
+        return A
 
     #Calculates the 
     def calculateMoments(self, velocities, alphas):
@@ -91,8 +93,9 @@ class PhysicsCalc:
     def calculateBNew(self, alphas, constants, state):
         inputsWrapped = lambda alpha : self.calculateBFunctional(alpha, state, constants["Inertias"])
         epsilon = 1e-6
-        J = approx_fprime(alphas, inputsWrapped, epsilon)
-        return J
+        #approx_fprim calculates the jacobian
+        B = approx_fprime(alphas, inputsWrapped, epsilon)
+        return B
         
     def getU(self,time, state, constants, oldAngles):
         # print(state)
@@ -138,8 +141,8 @@ class PhysicsCalc:
         # print(u)
         i = 0
         for val in u:
-            if(np.abs(val) > 8 * np.pi/180):
-                u[i] = np.sign(val) * 8 * np.pi/180
+            if(np.abs(val) > 19 * np.pi/180):
+                u[i] = np.sign(val) * 10 * np.pi/180
             i = i + 1
         return u
 

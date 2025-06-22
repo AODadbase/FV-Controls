@@ -1,7 +1,7 @@
 import numpy as np
 from Equations import Kalman
 from Equations import TrueValues
-from eulerEquations import state
+from Control.ControlSimulation import state
 import matplotlib.pyplot as plt
 import random
 
