@@ -161,3 +161,5 @@ test_flight.export_data(
 
 
 ##I COMMENTED OUT THE CONTROLLER AND COMMENTED OUT THE PHYSICS CHANGES IN OURFIN
+
+## To run, run python -m Dynamics.MAURICE2RocketPy
