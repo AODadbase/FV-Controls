@@ -70,7 +70,7 @@ class PhysicsCalc:
         A = approx_fprime(state, physicsWrapped, epsilon)
         return A
 
-    #Calculates the 
+    #Calculates the moment. Imput data from CFD
     def calculateMoments(self, velocities, alphas):
         vScale = np.sqrt(np.dot(velocities,velocities))/210
         # Mx = 0.5 *( alphas[0] + alphas[2]) * vScale
