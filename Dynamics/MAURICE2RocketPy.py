@@ -1,20 +1,32 @@
+import sys
+import os
+
+# add Folder1 to path
+sys.path.append(os.path.abspath("../Control"))
+
+
 import datetime
 import numpy as np
 from scipy import linalg
 
 from rocketpy import Environment, SolidMotor, Rocket, Flight
-from OurFin import ourFins
+from Dynamics.OurFin import ourFins
 from rocketpy.control.controller import _Controller
-from eulerEquations import PhysicsCalc
+from Control.ControlSimulation import PhysicsCalc
 import matplotlib.pyplot as plt
+
+
+#No constants in yet (I forgot what goes for)
 def generateConstants():
     constants = 1
     return constants
 
+#This is the controller that the rocket uses
+#Every timestep rollControlFunction is called which will update the aileron angles using Physics Calc
 def rollControlFunction(
     time, sampling_rate, state, state_history, observed_variables, finTabs
 ):
-    ABCalculator = PhysicsCalc()
+    ABCalculator = PhysicsCalc() #Comes from control Simulation.py
     constants = ABCalculator.getConstants(time)
 
     # constants = generateConstants()
@@ -30,7 +42,8 @@ def rollControlFunction(
 
 
 
-
+#Makes a rocket with rocket py
+#Values are taken from open rocket
 def makeOurRocket(samplingRate):
     coolRocket = Rocket(
         radius=7.87/200,
@@ -41,34 +54,43 @@ def makeOurRocket(samplingRate):
         center_of_mass_without_motor=0.669,
         coordinate_system_orientation="tail_to_nose",
     )
+    #Remeasure
     ourMOtor = SolidMotor(
+<<<<<<< HEAD:Kalman/rocketpytesting.py
     # thrust_source="C:\\Users\\alber\\Documents\\GitHub\\FV-Controls\\Kalman\\AeroTech_HP-I280DM.eng",  # Or use a CSV thrust file
     thrust_source = '/Users/dsong/Downloads/AeroTech HP-I280DM.eng',
+=======
+    thrust_source="C:\\Users\\alber\\Documents\\GitHub\\FV-Controls\\Dynamics\\AeroTech_HP-I280DM.eng",  # Or use a CSV thrust file
+>>>>>>> origin/main:Dynamics/MAURICE2RocketPy.py
     dry_mass=(0.616 - 0.355),  # kg
     burn_time=1.9,  # Corrected burn time
 
     dry_inertia=(0.00055, 0.00055, 0.00011),  # kg·m² (approximated)
-    nozzle_radius= (10 / 1000),  # 14 mm = 0.014 m
+    nozzle_radius= (10 / 1000), 
     grain_number=5,
-    grain_density=18,  # kg/m³
-    grain_outer_radius= 7 / 1000,  # 19 mm = 0.019 m
-    grain_initial_inner_radius=4 / 1000,  # 7 mm = 0.007 m
-    grain_initial_height= 360 / 5000,  # 120 mm = 0.12 m
-    grain_separation=0.01,  # Single grain
+    grain_density=18, 
+    grain_outer_radius= 7 / 1000,  
+    grain_initial_inner_radius=4 / 1000,  
+    grain_initial_height= 360 / 5000,  
+    grain_separation=0.01,  
     grains_center_of_mass_position=-0.07,  # Estimated
     center_of_dry_mass_position=0.05,  # Estimated
     nozzle_position=-0.3,
-    throat_radius= 3.5 / 1000,  # 5.5 mm = 0.0055 m
+    throat_radius= 3.5 / 1000,  
     coordinate_system_orientation="nozzle_to_combustion_chamber",
     )
     coolRocket.add_motor(ourMOtor, position=0.01*(117-86.6))
     nose_cone = coolRocket.add_nose(
         length=0.19, kind="lvhaack", position=0.01*(117-0.19)
     )
+    #Boat Tail
+    #Verify that it is von karman
     tail = coolRocket.add_tail(
         top_radius=0.0787/2, bottom_radius=0.0572/2, length=0.0381, position=.0381
     )
 
+
+    #Created in OurFin.py, inherited from rocketpy fins
     ourNewFins = ourFins(
         n=4,
         root_chord=0.203,
@@ -78,10 +100,11 @@ def makeOurRocket(samplingRate):
         cant_angle=0.01,
         sweep_angle=62.8
     )
+    #Sampling
     ourController = _Controller(
         interactive_objects= ourNewFins,
-        controller_function= rollControlFunction,
-        sampling_rate= samplingRate,
+        controller_function= rollControlFunction, #Pass our function into rocketpy
+        sampling_rate= samplingRate, #How often it runs
         name="KRONOS",
     )
 
@@ -143,3 +166,5 @@ test_flight.export_data(
 
 
 ##I COMMENTED OUT THE CONTROLLER AND COMMENTED OUT THE PHYSICS CHANGES IN OURFIN
+
+## To run, run python -m Dynamics.MAURICE2RocketPy
