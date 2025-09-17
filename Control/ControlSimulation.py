@@ -27,7 +27,7 @@ class PhysicsCalc:
 
         else:
             constants["Mass"] = 2.375
-            longI  = 0.32 + (0.32 - 0.28) * (-1 * time) * 0.5
+            longI  = -0.0209 * time + 0.384
             Inertia[0] = longI
             Inertia[1] = longI
             constants["DragCoeff"] = 0.611 - 0.0155* time + 0.0337 * time * time - 0.00823 * time * time * time
@@ -126,10 +126,9 @@ class PhysicsCalc:
         #     print("❌ CARE solve failed:", e)
         #     return [0, 0, 0, 0]
 
-        K = np.array([[0,0,5,0,0,0],
-                     [0,0,0,0,0,0],
-                     [0,0,0,0,0,0],
-                     [0,0,0,0,0,0]])
+        #K = np.array([[0,0,5,0,0,0], [0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]])
+        P = linalg.solve_continuous_are(AMatrix, BMatrix, Qmatrix, Rmatrix)
+        K = linalg.inv(Rmatrix) @ BMatrix.T @ P
 
         #u = -kx
         # for i in range(3):
