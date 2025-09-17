@@ -18,14 +18,14 @@ class PhysicsCalc:
         constants["Fin Moments"] = np.array([0.003,0.003,0.003]) #Fin misalignment from open rocket
         constants["correctiveConstants"] = 1
 
-        if(time > 2):
-            constants["Mass"] = 2.875
+        if(time > 1.97):
+            constants["Mass"] = 2.991
             Inertia[0] = 0.0025
             Inertia[1] = 0.0025
             constants["DragCoeff"] = 0.547 + 0.00473* time + 0.00805 * time * time
 
         else:
-            constants["Mass"] = 2.259
+            constants["Mass"] = 2.375
             longI  = 0.32 + (0.32 - 0.28) * (-1 * time) * 0.5
             Inertia[0] = longI
             Inertia[1] = longI

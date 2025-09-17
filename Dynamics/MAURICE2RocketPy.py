@@ -56,7 +56,7 @@ def makeOurRocket(samplingRate):
     )
     #Remeasure
     ourMOtor = SolidMotor(
-    thrust_source="C:\\Users\\alber\\Documents\\GitHub\\FV-Controls\\Dynamics\\AeroTech_HP-I280DM.eng",  # Or use a CSV thrust file
+    thrust_source="./Dynamics/AeroTech_HP-I280DM.eng",  # Or use a CSV thrust file
     dry_mass=(0.616 - 0.355),  # kg
     burn_time=1.9,  # Corrected burn time
 
