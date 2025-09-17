@@ -12,24 +12,25 @@ class PhysicsCalc:
     #Drag coffecients and inertias are from openrocket, as a function of time
 
     #CHECK ALL VALUES!!!!!!!!!!!!!!!!!!
+    
     def getConstants(self, time):
         constants = dict()
-        Inertia = np.array([3,3,0.0025])
+        Inertia = np.array([3,3,0.004])
         constants["Fin Moments"] = np.array([0.003,0.003,0.003]) #Fin misalignment from open rocket
         constants["correctiveConstants"] = 1
 
         if(time > 1.97):
             constants["Mass"] = 2.991
-            Inertia[0] = 0.0025
-            Inertia[1] = 0.0025
-            constants["DragCoeff"] = 0.547 + 0.00473* time + 0.00805 * time * time
+            Inertia[0] = 0.345
+            Inertia[1] = 0.345
+            constants["DragCoeff"] = 0.668 -0.0144* time + 0.00121 * time * time - 0.0000353 * time * time * time
 
         else:
             constants["Mass"] = 2.375
             longI  = 0.32 + (0.32 - 0.28) * (-1 * time) * 0.5
             Inertia[0] = longI
             Inertia[1] = longI
-            constants["DragCoeff"] = 0.604 - 0.0132* time + 0.00107 * time * time - 0.0000301 * time * time * time
+            constants["DragCoeff"] = 0.611 - 0.0155* time + 0.0337 * time * time - 0.00823 * time * time * time
 
 
 
@@ -125,7 +126,7 @@ class PhysicsCalc:
         #     print("❌ CARE solve failed:", e)
         #     return [0, 0, 0, 0]
 
-        K = np.array([[0,0,10,0,0,0],
+        K = np.array([[0,0,5,0,0,0],
                      [0,0,0,0,0,0],
                      [0,0,0,0,0,0],
                      [0,0,0,0,0,0]])
