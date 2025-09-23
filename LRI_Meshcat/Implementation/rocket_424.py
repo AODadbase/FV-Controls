@@ -1,3 +1,4 @@
+from dataclasses import MISSING
 import numpy as np
 import pybullet
 from pybullet_utils import bullet_client
@@ -34,9 +35,6 @@ class Simulator:
 
         # Parameters
         self.maximum_aileron_deflection = np.radians(15)        # <-- slightly less than 30 degrees
-        self.params = {
-            'g': 9.81, # m/s^2
-        }
         
         # Connect to and configure pybullet
         self.display_meshcat = display
@@ -71,7 +69,7 @@ class Simulator:
             str(Path('./urdf/rocket.urdf')),
             basePosition=np.array([0., 0., 0.]),
             baseOrientation=self.bullet_client.getQuaternionFromEuler([0., -np.pi/2, 0.]),
-            flags=(self.bullet_client.URDF_USE_INERTIA_FROM_FILE  ))
+            flags=(self.bullet_client.URDF_USE_INERTIA_FROM_FILE))
         # Purple #200e45
         self.bullet_client.changeVisualShape(
             objectUniqueId=self.robot_id,
@@ -93,12 +91,12 @@ class Simulator:
                     linearDamping=0.,
                     angularDamping=0.,
                 )
-        # # Maybe need??? temp comment out to make ailerons appear in correct place
+        # Maybe need??? temp comment out to make ailerons appear in correct place
 
-        # self.joint_name_to_index = {
-        #     self.bullet_client.getJointInfo(self.robot_id, i)[1].decode(): i
-        #     for i in range(self.bullet_client.getNumJoints(self.robot_id))
-        # }
+        self.joint_name_to_index = {
+            self.bullet_client.getJointInfo(self.robot_id, i)[1].decode(): i
+            for i in range(self.bullet_client.getNumJoints(self.robot_id))
+        }
 
         # Initialize meshcat if necessary
         if self.display_meshcat:
@@ -166,7 +164,7 @@ class Simulator:
                 'p_y': 0.,
                 'p_z': 0.,
                 'psi': 0.,
-                'theta': 0.,
+                'theta': -np.pi/2,
                 'phi': 0.,
                 'v_x': 0.,
                 'v_y': 0.,
@@ -195,7 +193,6 @@ class Simulator:
         # matrix that describes the orientation of the body frame in the world frame
         pos, ori = self.bullet_client.getBasePositionAndOrientation(self.robot_id)
         R_body_in_world = np.reshape(np.array(self.bullet_client.getMatrixFromQuaternion(ori)), (3, 3))
-
         # Set linear and angular velocity
         # - Define linear velocity in body frame
         v_body = np.array([
@@ -351,10 +348,11 @@ class Simulator:
         # Get the current time
         self.t = self.time_step * self.dt
 
-        # Get the sensor measurements
+        # Get the sensor measurements; #FIXME: these values are outputted from rocketpy simulation
         p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z = self.get_sensor_measurements()
         
-        # Get the actuator commands
+        # Get the actuator commands; #FIXME: these values are outputted from rocketpy simulation
+        # controller.run() will return the data outputted from the control software
         delta_1_command, delta_2_command, delta_3_command, delta_4_command = controller.run(
             self.t,
             p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z,
@@ -364,7 +362,7 @@ class Simulator:
         delta_1, delta_2, delta_3, delta_4 = self.set_actuator_commands(delta_1_command, delta_2_command, delta_3_command, delta_4_command)
         
         # Get aerodynamic forces and torques
-        f_x, f_y, f_z, tau_x, tau_y, tau_z = ...
+        f_x, f_y, f_z, tau_x, tau_y, tau_z = 0, 0, 0, 0, 0, 0 # <-- #FIXME: replace with your own model!
 
         # Apply aerodynamic forces
         self.bullet_client.applyExternalForce(
@@ -545,6 +543,8 @@ class Simulator:
 
     
     def meshcat_init(self):
+        import meshcat.geometry as g
+        import meshcat.transformations as tf
         # Create a visualizer
         self.vis = meshcat.Visualizer().open()
 
@@ -624,7 +624,7 @@ class Simulator:
             )
         )
         
-        # Add third aileron
+        # # Add third aileron
         self.vis['robot']['aileron3'].set_object(
             meshcat.geometry.StlMeshGeometry.from_file(str(Path('./urdf/aileron3.stl'))),
             meshcat.geometry.MeshPhongMaterial(
@@ -647,7 +647,7 @@ class Simulator:
         )
 
         # Turn off grid
-        self.vis['/Grid'].set_property('visible', False)
+        self.vis['/Grid'].set_property('visible', True)
 
         # Add lights
         self.meshcat_lights()
@@ -661,7 +661,7 @@ class Simulator:
         self.vis['/Cameras/default/rotated/<object>'].set_property('far', 500.)
 
         # Turn off axes
-        self.vis[f'/Axes/<object>'].set_property('visible', False)
+        self.vis[f'/Axes/<object>'].set_property('visible', True)
 
         
     def meshcat_update(self):
@@ -686,22 +686,22 @@ class Simulator:
         # R = meshcat.transformations.rotation_matrix(self.delta_l, [0.37352883778028634, 0.9275991332385393, 0.006004611695959905])
         # self.vis['robot']['elevon-left'].set_transform(T @ R)
 
-        # FIXME: Commented out because it was causing ailerons to not appear in correct place, fix later
-        # import meshcat.transformations as tf
+        import meshcat.transformations as tf
 
-        # joint_origins = [
-        #     ([0.5, 0.3, 0.0], [0, 0, 0]),         # aileron1
-        #     ([0.5, -0.3, 0.0], [0, 0, 3.1416]),   # aileron2
-        #     ([-0.5, 0.0, 0.0], [0, 0, 1.5708]),   # aileron3
-        #     ([0.0, 0.5, 0.0], [0, 0, -1.5708]),   # aileron4
-        # ]
+        joint_origins = [
+            ([0.0, 0.0, 0.0], [0, 0, 0]),         # aileron1
+            ([0.0, 0.0, 0.0], [0, 0, 0]),         # aileron2
+            ([0.0, 0.0, 0.0], [0.0, 0, 0]),       # aileron3
+            ([0.0, 0.0, 0.0], [0.0, 0, 0]),       # aileron4
+        ]
 
-        # for i, joint_name in enumerate(['aileron1_joint', 'aileron2_joint', 'aileron3_joint', 'aileron4_joint']):
-        #     joint_index = self.joint_name_to_index[joint_name]
-        #     joint_state = self.bullet_client.getJointState(self.robot_id, joint_index)
-        #     joint_angle = joint_state[0]
-        #     xyz, rpy = joint_origins[i]
-        #     T_origin = tf.compose_matrix(translate=xyz, angles=rpy)
-        #     T_joint = tf.rotation_matrix(joint_angle, [0, 1, 0])
-        #     T = tf.concatenate_matrices(T_origin, T_joint)
-        #     self.vis['robot'][f'aileron{i+1}'].set_transform(T)
+        for i, joint_name in enumerate(['aileron1_joint', 'aileron2_joint', 'aileron3_joint', 'aileron4_joint']):
+            # joint_index = self.joint_name_to_index[joint_name]
+            joint_index = self.joint_name_to_index[joint_name]
+            joint_state = self.bullet_client.getJointState(self.robot_id, joint_index)
+            joint_angle = joint_state[0]
+            xyz, rpy = joint_origins[i]
+            T_origin = tf.compose_matrix(translate=xyz, angles=rpy)
+            T_joint = tf.rotation_matrix(joint_angle, [0, 1, 0])
+            T = tf.concatenate_matrices(T_origin, T_joint)
+            self.vis['robot'][f'aileron{i+1}'].set_transform(T)
