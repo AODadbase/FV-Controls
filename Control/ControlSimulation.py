@@ -24,7 +24,6 @@ class PhysicsCalc:
             Inertia[0] = 0.345
             Inertia[1] = 0.345
             constants["DragCoeff"] = 0.668 -0.0144* time + 0.00121 * time * time - 0.0000353 * time * time * time
-
         else:
             constants["Mass"] = 2.375
             longI  = -0.0209 * time + 0.384
