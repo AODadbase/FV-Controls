@@ -73,16 +73,20 @@ class PhysicsCalc:
 
     #Calculates the moment. Imput data from CFD
     def calculateMoments(self, velocities, alphas):
-        vScale = np.sqrt(np.dot(velocities,velocities))/210
+        #vScale = np.sqrt(np.dot(velocities,velocities))/210
         # Mx = 0.5 *( alphas[0] + alphas[2]) * vScale
         # My =  0.5*( alphas[1] + alphas[3]) * vScale
         
         # Mz = 0.02 * (alphas[1] + alphas[3] - alphas[2] - alphas [0]) * vScale
-        Mx = 0.5 *( alphas[0]) * vScale * vScale
+        Mx = 0
         My = 0
-        Mz = 1 * (alphas [0]) * vScale * vScale
+        Mz = alphas[0]/8 * (4.11522634e-09*(velocities[2]**3) 
+                            -1.04938272e-06*(velocities[2]**2) 
+                            + 3.35185185e-04*velocities[2] 
+                            -1.22222222e-02)
 
         return np.array([Mx, My, Mz])
+    
 
     def calculateBFunctional(self, alphas, x, inertias):
         moments = self.calculateMoments(np.array([x[3], x[4], x[5]]), alphas)
