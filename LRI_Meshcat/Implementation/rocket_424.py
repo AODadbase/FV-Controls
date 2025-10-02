@@ -34,7 +34,7 @@ class Simulator:
         self.delta_4 = 0.
 
         # Parameters
-        self.maximum_aileron_deflection = np.radians(15)        # <-- slightly less than 30 degrees
+        self.maximum_aileron_deflection = np.radians(8)        # <-- Max aileron deflection angle in radians
         
         # Connect to and configure pybullet
         self.display_meshcat = display
@@ -124,7 +124,17 @@ class Simulator:
         v_x, v_y, v_z = v_body
         w_x, w_y, w_z = w_body
 
+        w_z += ... # TODO: add gyro noise: allan variance -> angle random walk 
+
         return p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z
+
+        # pos, ori = self.bullet_client.getBasePositionAndOrientation(self.robot_id)
+        # vel = self.bullet_client.getBaseVelocity(self.robot_id)
+        # w_world = np.array(vel[1])
+        # R_body_in_world = np.reshape(np.array(self.bullet_client.getMatrixFromQuaternion(ori)), (3, 3))
+        # w_body = R_body_in_world.T @ w_world
+        # w_x, w_y, w_z = w_body
+        # return w_z
     
     def set_actuator_commands(
                 self,
@@ -350,6 +360,7 @@ class Simulator:
 
         # Get the sensor measurements; #FIXME: these values are outputted from rocketpy simulation
         p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z = self.get_sensor_measurements()
+        # w_z = self.get_sensor_measurements()
         
         # Get the actuator commands; #FIXME: these values are outputted from rocketpy simulation
         # controller.run() will return the data outputted from the control software
