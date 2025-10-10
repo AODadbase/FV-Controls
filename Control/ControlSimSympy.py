@@ -256,7 +256,6 @@ class Controls:
         ])
 
         ## Corrective Moment Coefficient ##
-
         Cn = ... # TODO: implement this with a sinusoidal fit, copy paste function here like for SM
         Cnalpha = Cn / AoA
         SM = 2.8 + -0.48*AoA + 0.163*AoA**2 + -0.0386*AoA**3 + 5.46E-03*AoA**4 + -4.61E-04*AoA**5 + 2.28E-05*AoA**6 + -6.1E-07*AoA**7 + 6.79E-09*AoA**8
@@ -284,6 +283,8 @@ class Controls:
 
         m = Matrix([w1, w2, w3, v1, v2, v3, qw, qx, qy, qz])
         n = Matrix([delta1])
+
+    ### IGNORE BELOW THIS LINE, CONSTRUCTION ZONE BELOW ###
 
         # Define parameters
         constants = self.getConstants(t, AoA)
