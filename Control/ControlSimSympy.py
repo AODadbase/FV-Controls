@@ -256,13 +256,13 @@ def getABC(t: float):
 #     solution = fsolve(func_with_vec, guess)
 #     return np.array([solution[0], solution[1], solution[2]])    
 
-def addSensorNoise(g,time,bias, instability, std):
+def addSensorNoise(g,time,bias, instability, ARW):
     """g - w1,w2,w3"""
     """Errors are also arrays, one for each"""
     output = []
     for i in range(3):
         currentBias = instability[i] * time + bias[i]
-        o = g + currentBias + np.random.normal(0,std)
+        o = g + currentBias + np.random.normal(0,ARW*time)
         output.append(o)
     return output
 
