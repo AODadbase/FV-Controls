@@ -4,6 +4,8 @@ from scipy import linalg
 from control import lqr
 import pandas as pd
 import os
+from scipy.optimize import fsolve
+
 
 t_motor_burnout = 1.97  # seconds
 
@@ -207,6 +209,64 @@ def getABC(t: float):
 
     return A, B, C
 
+
+
+
+# def rotation_matrix_x(theta):
+#     """Rotation matrix around the X-axis"""
+#     return np.array([
+#         [1, 0, 0],
+#         [0, np.cos(theta), -np.sin(theta)],
+#         [0, np.sin(theta), np.cos(theta)]
+#     ])
+
+# def rotation_matrix_y(theta):
+#     """Rotation matrix around the Y-axis"""
+#     return np.array([
+#         [np.cos(theta), 0, np.sin(theta)],
+#         [0, 1, 0],
+#         [-np.sin(theta), 0, np.cos(theta)]
+#     ])
+
+# def rotation_matrix_z(theta):
+#     """Rotation matrix around the Z-axis"""
+#     return np.array([
+#         [np.cos(theta), -np.sin(theta), 0],
+#         [np.sin(theta), np.cos(theta), 0],
+#         [0, 0, 1]
+#     ])
+
+# def equations(var, vector,baseField):
+#     xAngle, yAngle, zAngle = var
+#     rotatedVector = rotation_matrix_x(xAngle) @ rotation_matrix_y(yAngle) @ rotation_matrix_z(zAngle) @ vector - baseField
+#     return [rotatedVector[0], rotatedVector[1], rotatedVector[2]]
+
+# def getEulerAngles(mag, baseField):
+#     """Get the equations of motion for the rocket.
+
+#     Args:
+#         mag : Measurement of the magnetic field vector, done in the rocket frame
+#         baseField : Measurement of the magnetic field vector in the ground frame
+
+#     Returns:
+#         (tuple: A tuple containing the euler angles )
+#     """
+#     func_with_vec = lambda angles : equations(angles, mag, baseField)
+#     guess = np.array([0,0,0])
+#     solution = fsolve(func_with_vec, guess)
+#     return np.array([solution[0], solution[1], solution[2]])    
+
+def addSensorNoise(g,time,bias, instability, std):
+    """g - w1,w2,w3"""
+    """Errors are also arrays, one for each"""
+    output = []
+    for i in range(3):
+        currentBias = instability[i] * time + bias[i]
+        o = g + currentBias + np.random.normal(0,std)
+        output.append(o)
+    return output
+
+
 def main():
     A, B, C = getABC(0)
     print("A Matrix:")
@@ -216,8 +276,17 @@ def main():
     print("C Matrix:")
     print(C)
 
+    baseField = np.array([1,1,1])
+    mag = np.array([1,1,2])
+    angles = getEulerAngles(mag,baseField)
+    output = rotation_matrix_x(angles[0]) @ rotation_matrix_y(angles[1]) @ rotation_matrix_z(angles[2]) @ mag
+    print(output)
+
 if __name__ == "__main__":
     main()
+
+
+
 
 # IGNORE TEMP CODE BELOW
 class ControlSimSympy:
