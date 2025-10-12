@@ -231,7 +231,8 @@ class Controls:
         Returns:
             tuple: A tuple containing the A and B Numpy arrays.
         """
-        w1, w2, w3, v1, v2, v3 = symbols('w_1 w_2 w_3 v_1 v_2 v_3', real = True) # Angular and linear velocities
+        w1, w2, w3, v1, v2 = symbols('w_1 w_2 w_3 v_1 v_2', real = True) # Angular and linear velocities
+        v3 = symbols('v_3', real = True, positive = True) # Longitudinal velocity, assumed positive during flight
         qw, qx, qy, qz = symbols('q_w q_x q_y q_z', real = True) # Quaternion components
         I1, I2, I3 = symbols('I_1 I_2 I_3', real = True) # Moments of inertia
         M1, M2, M3 = symbols('M_1 M_2 M_3', real = True) # Moments
@@ -239,11 +240,12 @@ class Controls:
         mass, rho, A, g = symbols('m rho A g', real = True) # Mass, air density, reference area, gravity
         delta1 = symbols('delta_1', real = True) # Aileron angle
 
-        AoA = atan2(sqrt(v1**2 + v2**2), v3) # Angle of attack
+        epsAoA = Float(1e-10)  # Small term to avoid division by zero in AoA calculation
+        AoA = atan2(sqrt(v1**2 + v2**2), v3 + epsAoA) # Angle of attack
 
         eps = Float(1e-10)  # Small term to avoid division by zero
         v = Matrix([v1, v2, v3]) # Velocity vector
-        v_mag = v.norm() + eps # Magnitude of velocity with small term to avoid division by zero
+        v_mag = sqrt(v1**2 + v2**2 + v3**2 + eps**2) # Magnitude of velocity with small term to avoid division by zero
         vhat = v / v_mag  # Unit vector in direction of velocity
 
         ## Thrust ##
@@ -259,8 +261,9 @@ class Controls:
         Fd : Matrix = Fd_mag * vhat # Drag force vector
 
         ## Lift Force ##
-        beta = Piecewise((atan2(v2, v1), v1**2 + v2**2 > eps),
-                 (Float(0), True))
+        eps_beta = Float(1e-10)
+        nan_guard = sqrt(v1**2 + v2**2 + eps_beta**2)
+        beta = 2 * atan2(v2, nan_guard + v1) # Equivalent to atan2(v2, v1) but avoids NaN at (0,0)
         L = 1/2 * rho * v_mag**2 * (2 * pi * AoA) * A # Lift force approximation
         nL = Matrix([
             -cos(AoA) * cos(beta),
@@ -280,7 +283,7 @@ class Controls:
             Cn = -11.2 + 2.35*v_mag + -0.183*v_mag**2 + 7.59E-03*v_mag**3 + -1.9E-04*v_mag**4 + 3.04E-06*v_mag**5 + -3.2E-08*v_mag**6 + 2.2E-10*v_mag**7 + -9.47E-13*v_mag**8 + 2.33E-15*v_mag**9 + -2.5E-18*v_mag**10
 
         ## Cnalpha ##
-        aoa_eps = Float(1e-6)
+        aoa_eps = Float(1e-3)
         Cnalpha = Cn * (AoA / (AoA**2 + aoa_eps**2)) # Avoid division by zero, ensures Cnalpha is well-defined at AoA = 0 and smooth
 
         ## Stability Margin ##
@@ -335,7 +338,6 @@ class Controls:
         inertia = constants["inertia"]
         thrust = constants["thrust"]
 
-        # NOTE: ignore for now, causing moment when rocket isn't moving
         Mf = Matrix([0.003, 0.003, 0.003])  # Fin misalignment from open rocket
         M = Mf + self.getAileronMoment(delta1, v3)
 
