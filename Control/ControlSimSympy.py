@@ -10,6 +10,8 @@ class Controls:
     def __init__(
             self,
             t_motor_burnout: float = 1.971,
+            t_estimated_apogee: float = 13.571,
+            t_launch_rail_clearance: float = 0.164
         ):
         """Initialize the Controls class. Rocket body axis is aligned with y-axis.
 
@@ -17,6 +19,8 @@ class Controls:
             t_motor_burnout (float, optional): Time until motor burnout in seconds. Defaults to 1.971.
         """
         self.t_motor_burnout = t_motor_burnout # seconds
+        self.t_estimated_apogee = t_estimated_apogee # seconds
+        self.t_launch_rail_clearance = t_launch_rail_clearance # seconds
         self.csv_path = os.path.join(os.path.dirname(__file__), "important_data.csv")
 
     def getLineOfBestFitTime(self, var: str, n: int = 1):
@@ -52,10 +56,11 @@ class Controls:
         return coeffs, n
 
 
-    def getLineOfBestFitAoA(self, var: str, n: int = 5):
+    def getLineOfBestFitAoA(self, burnout: str, var: str, n: int = 5):
         """Get the line of best fit for the given data with a polynomial of degree n. Choose from "stability margin" or "normal force coeff".
 
         Args:
+            burnout (str): Choose from "pre burnout" or "post burnout".
             var (str): The variable to fit the line to.
             n (int, optional): The degree of the polynomial to fit. Defaults to 5.
 
@@ -67,19 +72,26 @@ class Controls:
         x = data["Angle of attack (°)"]
         if (var == "stability margin"):
             y = data["Stability margin calibers (​)"]
-        elif (var == "normal force coeff"):
-            y = data["Normal force coefficient (​)"]
         else:
             raise ValueError(
                 "Invalid variable. Choose from: " \
-                "'stability margin', " \
-                "'normal force coeff'. "
+                "'stability margin'. "
                 )
 
-        mask = y != np.nan
-        motor_burnout = data["# Time (s)"] > self.t_motor_burnout # TODO: use motor_burnout to split data between pre and post burnout
-        x = x[mask]
-        y = y[mask]
+        launch_to_burnout = (data["# Time (s)"] >= self.t_launch_rail_clearance) & (data["# Time (s)"] < self.t_motor_burnout)
+        burnout_to_apogee = (data["# Time (s)"] >= self.t_motor_burnout) & (data["# Time (s)"] <= self.t_estimated_apogee)
+        if (burnout == "pre burnout"):
+            x = x[launch_to_burnout]
+            y = y[launch_to_burnout]
+        elif (burnout == "post burnout"):
+            x = x[burnout_to_apogee]
+            y = y[burnout_to_apogee]
+        else:
+            raise ValueError(
+                "Invalid motor_burnout. Choose from: " \
+                "'pre burnout', " \
+                "'post burnout'. "
+                )
 
         coeffs = np.polyfit(x, y, n)
         return coeffs, n
@@ -100,22 +112,19 @@ class Controls:
         x = data["Total velocity (m/s)"]
         if (var == "drag force"):
             y = data["Drag force (N)"]
-        elif (var == "drag coeff"):
-            y = data["Drag coefficient (​)"]
         else:
             raise ValueError(
                 "Invalid variable. Choose from: " \
-                "'drag force', " \
-                "'drag coeff'. "
+                "'drag force'. "
                 )
-        motor_burnout = data["# Time (s)"] > self.t_motor_burnout 
-        x = x[not motor_burnout]
-        y = y[not motor_burnout]
+        launch_to_apogee = (data["# Time (s)"] >= self.t_launch_rail_clearance) & (data["# Time (s)"] <= self.t_estimated_apogee)
+        x = x[launch_to_apogee]
+        y = y[launch_to_apogee]
 
         coeffs = np.polyfit(x, y, n)
         return coeffs, n
 
-    def getConstants(self, t: float, AoA: float):
+    def getTimeConstants(self, t: float):
         """Get the constants for the rocket at time t.
 
         Args:
@@ -147,7 +156,6 @@ class Controls:
         constants["inertia"] = I
         constants["mass"] = m
         constants["thrust"] = T
-        constants["fin moments"] = Matrix([0.003, 0.003, 0.003])  # Fin misalignment from open rocket
         
         return constants
 
@@ -194,24 +202,44 @@ class Controls:
             [2*(xz+wy),     2*(yz-wx),   1-2*(xx+yy)]
         ])
 
-    def getAB(self, t: float, AoA: float):
-        """Get the equations of motion for the rocket.
+    def getAB(self, t: float):
+        """Get the equations of motion for the rocket, derive the A and B matrices at time t.
+
+        Assumptions:
+        - Rocket body axis is aligned with z-axis
+        - No centrifugal forces are considered to simplify AoA and beta calculations
+        - Coefficient of lift is approximated as 2*pi*AoA (thin airfoil theory)
+        - Thrust acts only in the z direction of the body frame
+        - No wind or atmospheric disturbances are considered
+        - Density of air is constant at 1.225 kg/m^3
+
+        Notes:
+        - The state vector is [w1, w2, w3, v1, v2, v3, qw, qx, qy, qz] where w is angular velocity, v is linear velocity, and q is the quaternion.
+        - The input vector is [delta1] where delta1 is the aileron angle
+        - Thrust, mass, and inertia are time-varying based on the motor burn state
+        - Normal force coefficient Cn is modeled as a polynomial function of velocity, with different coefficients pre- and post-motor burnout
+        - Drag force Fd is modeled as a quadratic function of velocity magnitude
+        - Lift force Fl is modeled using thin airfoil theory, proportional to angle of attack (AoA)
+        - Corrective moment coefficient C is modeled as a function of velocity magnitude, normal force coefficient Cn, stability margin SM, and rocket diameter
+        - Normal force coefficient derivative Cnalpha is modeled as Cn * (AoA / (AoA^2 + aoa_eps^2)) to ensure smoothness at AoA = 0
+        - Stability margin SM is modeled as a polynomial function of AoA
+        - Small terms are added to avoid division by zero in velocity magnitude and AoA calculations (denoted as eps and aoa_eps)
 
         Args:
             t (float): The time in seconds.
-            AoA (float): The angle of attack in radians.
 
         Returns:
             tuple: A tuple containing the A and B Numpy arrays.
         """
-
-        w1, w2, w3, v1, v2, v3 = symbols('w1 w2 w3 v1 v2 v3', real = True) # Angular and linear velocities
-        qw, qx, qy, qz = symbols('qw qx qy qz', real = True) # Quaternion components
-        I1, I2, I3 = symbols('I1 I2 I3', real = True) # Moments of inertia
-        M1, M2, M3 = symbols('M1 M2 M3', real = True) # Moments
-        T1, T2, T3 = symbols('T1 T2 T3', real = True) # Thrusts
+        w1, w2, w3, v1, v2, v3 = symbols('w_1 w_2 w_3 v_1 v_2 v_3', real = True) # Angular and linear velocities
+        qw, qx, qy, qz = symbols('q_w q_x q_y q_z', real = True) # Quaternion components
+        I1, I2, I3 = symbols('I_1 I_2 I_3', real = True) # Moments of inertia
+        M1, M2, M3 = symbols('M_1 M_2 M_3', real = True) # Moments
+        T1, T2, T3 = symbols('T_1 T_2 T_3', real = True) # Thrusts
         mass, rho, A, g = symbols('m rho A g', real = True) # Mass, air density, reference area, gravity
-        delta1 = symbols('delta1', real = True) # Aileron angle
+        delta1 = symbols('delta_1', real = True) # Aileron angle
+
+        AoA = atan2(sqrt(v1**2 + v2**2), v3) # Angle of attack
 
         eps = Float(1e-10)  # Small term to avoid division by zero
         v = Matrix([v1, v2, v3]) # Velocity vector
@@ -244,6 +272,27 @@ class Controls:
         ## Total Forces ##
         F = T + Fd + Fl + Fg # Total force vector
 
+        ## Normal force coefficient ##
+        Cn = None
+        if t <= self.t_motor_burnout:
+            Cn = 28 + -3.49*v_mag + 0.236*v_mag**2 + -9.81E-03*v_mag**3 + 2.57E-04*v_mag**4 + -4.35E-06*v_mag**5 + 4.77E-08*v_mag**6 + -3.39E-10*v_mag**7 + 1.49E-12*v_mag**8 + -3.73E-15*v_mag**9 + 4.02E-18*v_mag**10
+        else:
+            Cn = -11.2 + 2.35*v_mag + -0.183*v_mag**2 + 7.59E-03*v_mag**3 + -1.9E-04*v_mag**4 + 3.04E-06*v_mag**5 + -3.2E-08*v_mag**6 + 2.2E-10*v_mag**7 + -9.47E-13*v_mag**8 + 2.33E-15*v_mag**9 + -2.5E-18*v_mag**10
+
+        ## Cnalpha ##
+        aoa_eps = Float(1e-6)
+        Cnalpha = Cn * (AoA / (AoA**2 + aoa_eps**2)) # Avoid division by zero, ensures Cnalpha is well-defined at AoA = 0 and smooth
+
+        ## Stability Margin ##
+        SM = 2.8 + -0.48*AoA + 0.163*AoA**2 + -0.0386*AoA**3 + 5.46E-03*AoA**4 + -4.61E-04*AoA**5 + 2.28E-05*AoA**6 + -6.1E-07*AoA**7 + 6.79E-09*AoA**8
+
+        ## Rocket diameter ##
+        d = Float(7.87/100) # m
+
+        ## Corrective moment coefficient ##
+        C = v_mag**2 * A * Cnalpha * (SM * d) * rho / 2
+
+        ## Quaternion kinematics ##
         S = Matrix([[0, -w3, w2],
                     [w3, 0, -w1],
                     [-w2, w1, 0]])
@@ -255,13 +304,9 @@ class Controls:
             [w3, w2, -w1, 0]
         ])
 
-        ## Corrective Moment Coefficient ##
-        Cn = ... # TODO: implement this with a sinusoidal fit, copy paste function here like for SM
-        Cnalpha = Cn / AoA
-        SM = 2.8 + -0.48*AoA + 0.163*AoA**2 + -0.0386*AoA**3 + 5.46E-03*AoA**4 + -4.61E-04*AoA**5 + 2.28E-05*AoA**6 + -6.1E-07*AoA**7 + 6.79E-09*AoA**8
-        d = 7.87/100 # m, rocket diameter
-        C = v_mag**2 * A * Cnalpha * (SM * d) * rho / 2
+        # -------------------------------------------- #
 
+        ## Equations of motion ##
         w1dot = ((I2 - I3) * w2 * w3 - C * w1 + M1) / I1
         w2dot = ((I3 - I1) * w3 * w1 - C * w2 + M2) / I2
         w3dot = ((I1 - I2) * w1 * w2 + M3) / I3
@@ -281,45 +326,48 @@ class Controls:
             [qdot[3]]
         ])
 
-        m = Matrix([w1, w2, w3, v1, v2, v3, qw, qx, qy, qz])
-        n = Matrix([delta1])
+        m = Matrix([w1, w2, w3, v1, v2, v3, qw, qx, qy, qz]) # State vector
+        n = Matrix([delta1]) # Input vector
 
-    ### IGNORE BELOW THIS LINE, CONSTRUCTION ZONE BELOW ###
-
-        # Define parameters
-        constants = self.getConstants(t, AoA)
+        ## Get time varying constants ##
+        constants = self.getTimeConstants(t)
         mass_rocket = constants["mass"]
-        I = constants["inertia"]
-        T = constants["thrust"]
-        Mf = constants["fin moments"]
+        inertia = constants["inertia"]
+        thrust = constants["thrust"]
+
+        # NOTE: ignore for now, causing moment when rocket isn't moving
+        Mf = Matrix([0.003, 0.003, 0.003])  # Fin misalignment from open rocket
         M = Mf + self.getAileronMoment(delta1, v3)
 
         params = {
-            I1: Float(I[0]), # Ixx
-            I2: Float(I[1]), # Iyy
-            I3: Float(I[2]), # Izz
+            I1: Float(inertia[0]), # Ixx
+            I2: Float(inertia[1]), # Iyy
+            I3: Float(inertia[2]), # Izz
             M1: M[0],
             M2: M[1],
             M3: M[2],
-            T1: T[0],
-            T2: T[1],
-            T3: T[2],
+            T1: thrust[0],
+            T2: thrust[1],
+            T3: thrust[2],
             mass: Float(mass_rocket),
             rho: Float(1.225), # kg/m^3 temp constant rho
-            A: Float(pi*(7.87/100/2)**2), # m^2 reference area
+            A: pi * Float((7.87/100/2)**2), # m^2 reference area
             g: Float(9.81), # m/s^2
         }
 
         delta1_e = 0.0  # equilibrium aileron angle, can be changed to optimize for different conditions
         f = f.subs(params)
-        g = g.subs(params)
         m_e: dict = {
             w1: 0,
             w2: 0,
             w3: 0,
             v1: 0,
             v2: 0,
-            v3: Float((mass * fg / (D * v_mag)).subs(params))  # equilibrium vertical velocity
+            v3: 50, # TODO: WHAT DO I DO HEREEEEe
+            qw: 1, # TODO: vv what vv ????
+            qx: 0,
+            qy: 0,
+            qz: 0,
         }
         n_e: dict = {delta1: delta1_e}
 

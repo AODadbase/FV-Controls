@@ -124,7 +124,7 @@ class Simulator:
         v_x, v_y, v_z = v_body
         w_x, w_y, w_z = w_body
 
-        w_z += ... # TODO: add gyro noise: allan variance -> angle random walk 
+        # w_z += ... # TODO: add gyro noise: allan variance -> angle random walk 
 
         return p_x, p_y, p_z, psi, theta, phi, v_x, v_y, v_z, w_x, w_y, w_z
 
