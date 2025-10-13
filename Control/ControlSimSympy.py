@@ -21,7 +21,8 @@ class Controls:
         self.t_motor_burnout = t_motor_burnout # seconds
         self.t_estimated_apogee = t_estimated_apogee # seconds
         self.t_launch_rail_clearance = t_launch_rail_clearance # seconds
-        self.csv_path = os.path.join(os.path.dirname(__file__), "important_data.csv")
+        # self.csv_path = os.path.join(os.path.dirname(__file__), "important_data.csv")
+        self.csv_path = "/Users/dsong/Library/CloudStorage/OneDrive-UniversityofIllinois-Urbana/Club Stuff/LRI/FV-Controls/Control/important_data.csv"
 
     def getLineOfBestFitTime(self, var: str, n: int = 1):
         """Get the line of best fit for the given data with a polynomial of degree n.
@@ -49,7 +50,7 @@ class Controls:
                 )
 
         # Filter data based on motor burnout
-        mask = t >= self.t_motor_burnout
+        mask = t <= self.t_motor_burnout
         t = t[mask]
         y = y[mask]
         coeffs = np.polyfit(t, y, n)
@@ -240,10 +241,10 @@ class Controls:
         mass, rho, A, g = symbols('m rho A g', real = True) # Mass, air density, reference area, gravity
         delta1 = symbols('delta_1', real = True) # Aileron angle
 
-        epsAoA = Float(1e-10)  # Small term to avoid division by zero in AoA calculation
+        epsAoA = Float(1e-3)  # Small term to avoid division by zero in AoA calculation
         AoA = atan2(sqrt(v1**2 + v2**2), v3 + epsAoA) # Angle of attack
 
-        eps = Float(1e-10)  # Small term to avoid division by zero
+        eps = Float(1e-3)  # Small term to avoid division by zero
         v = Matrix([v1, v2, v3]) # Velocity vector
         v_mag = sqrt(v1**2 + v2**2 + v3**2 + eps**2) # Magnitude of velocity with small term to avoid division by zero
         vhat = v / v_mag  # Unit vector in direction of velocity
@@ -261,7 +262,7 @@ class Controls:
         Fd : Matrix = Fd_mag * vhat # Drag force vector
 
         ## Lift Force ##
-        eps_beta = Float(1e-10)
+        eps_beta = Float(1e-3)
         nan_guard = sqrt(v1**2 + v2**2 + eps_beta**2)
         beta = 2 * atan2(v2, nan_guard + v1) # Equivalent to atan2(v2, v1) but avoids NaN at (0,0)
         L = 1/2 * rho * v_mag**2 * (2 * pi * AoA) * A # Lift force approximation
@@ -283,8 +284,7 @@ class Controls:
             Cn = -11.2 + 2.35*v_mag + -0.183*v_mag**2 + 7.59E-03*v_mag**3 + -1.9E-04*v_mag**4 + 3.04E-06*v_mag**5 + -3.2E-08*v_mag**6 + 2.2E-10*v_mag**7 + -9.47E-13*v_mag**8 + 2.33E-15*v_mag**9 + -2.5E-18*v_mag**10
 
         ## Cnalpha ##
-        aoa_eps = Float(1e-3)
-        Cnalpha = Cn * (AoA / (AoA**2 + aoa_eps**2)) # Avoid division by zero, ensures Cnalpha is well-defined at AoA = 0 and smooth
+        Cnalpha = Cn * (AoA / (AoA**2 + epsAoA**2)) # Avoid division by zero, ensures Cnalpha is well-defined at AoA = 0 and smooth
 
         ## Stability Margin ##
         SM = 2.8 + -0.48*AoA + 0.163*AoA**2 + -0.0386*AoA**3 + 5.46E-03*AoA**4 + -4.61E-04*AoA**5 + 2.28E-05*AoA**6 + -6.1E-07*AoA**7 + 6.79E-09*AoA**8
@@ -357,40 +357,59 @@ class Controls:
             g: Float(9.81), # m/s^2
         }
 
-        delta1_e = 0.0  # equilibrium aileron angle, can be changed to optimize for different conditions
         f = f.subs(params)
+
+        ## Replace sqrt(v1^2 + v2^2) with a non-zero term to avoid NaNs in A matrix ##
+        vxy = sqrt(v1**2 + v2**2 + eps**2)
+        repl = {
+            sqrt(v1**2 + v2**2): vxy,
+            (v1**2 + v2**2)**Float(1)/2: vxy
+        }
+        f = f.xreplace(repl)
+
+        ## NOTE: Not finding equilibrium states, using trajectory/operating-point linearization
+        delta1_e = rad(0)  # equilibrium aileron angle, can be changed to optimize for different conditions
         m_e: dict = {
             w1: 0,
             w2: 0,
             w3: 0,
             v1: 0,
             v2: 0,
-            v3: 50, # TODO: WHAT DO I DO HEREEEEe
+            v3: 100, # TODO: WHAT DO I DO HEREEEEe
             qw: 1, # TODO: vv what vv ????
             qx: 0,
             qy: 0,
             qz: 0,
         }
         n_e: dict = {delta1: delta1_e}
+        f_subs = f.subs(m_e).subs(n_e) # debugging
 
         A = f.jacobian(m).subs(m_e).subs(n_e)
         B = f.jacobian(n).subs(m_e).subs(n_e)
 
-        A = np.array(A).astype(np.float64)
-        B = np.array(B).astype(np.float64)
-
-        return A, B
+        return f, f_subs, A, B
     
-    def getC(self, t: float, AoA: float):
+    def getC(self, t: float):
         """Get the C matrix for the rocket at time t.
 
         Args:
             t (float): The time in seconds.
-            AoA (float): The angle of attack in radians.
 
         Returns:
             np.ndarray: The C matrix.
         """
+        w1, w2, w3 = symbols('w_1 w_2 w_3', real = True) # Angular velocities
+        g1 = w1 + b1 + n1
+        g2 = w2 + b2 + n2
+        g3 = w3 + b3 + n3
+        g = Matrix([
+            [g1],
+            [g2],
+            [g3],
+            [],
+            [],
+            [],
+        ])
         
 # main() doesn't work yet, just a placeholder for now for future testing
 def main():
