@@ -48,25 +48,31 @@ with open("dataTest1072025.txt", "r") as file:
         line = str(line)
         line = line.replace("\x00", "")
         ar = line.split("|")
-        # if "sensor" in line:
-        #     allData.append(curList)
-        #     curList = []
+        if "sensor" in line:
+            allData.append(curList)
+            curList = []
         if(len(ar) > 5):
-            gryos = ar[4]
+            gryos = ar[1]
             gryoList = gryos.split(",")
             newList = []
             for val in gryoList:
-                newList.append(float(val) * 57.2958)
+                # conv =  57.2958
+                conv = 1
+                newList.append(float(val)  * conv)
             curList.append(newList)
-    allData.append(curList)
+    # allData.append(curList)
 
 ts = 0.1
-test = allData[0]
+test = allData[0][10:]
 test = np.array(test)
 
-xTest = np.cumsum(test[:,0]) * ts
-yTest = np.cumsum(test[:,1]) * ts
-zTest = np.cumsum(test[:,2]) * ts
+# xTest = np.cumsum(test[:,0]) * ts
+# yTest = np.cumsum(test[:,1]) * ts
+# zTest = np.cumsum(test[:,2]) * ts
+xTest = (test[:,0]) 
+yTest = (test[:,1]) 
+zTest = (test[:,2]) 
+
 
 tausX, devX = AllanDeviation(xTest, 10, 1000)
 tausY, devY = AllanDeviation(yTest, 10, 1000)
@@ -82,20 +88,20 @@ for i in range(len(tausX)):
 print(index)
 
 
-plt.plot(tausX, devX, label="Wx")
-plt.plot(tausY, devY, label="Wy")
-plt.plot(tausZ, devZ, label="Wz")
+plt.plot(tausX, devX, label="Mx")
+plt.plot(tausY, devY, label="My")
+plt.plot(tausZ, devZ, label="Mz")
 # plt.plot(testingtau, outputs, label= "-0.5 slope")
 plt.legend()
 plt.xscale('log')
 plt.yscale('log')
 plt.show()
 
-print("The deviation for Wx is " + str(devX[index] * 60))
-print("The deviation for Wy is " + str(devY[index] * 60))
-print("The deviation for Wz is " + str(devZ[index] * 60))
+print("The deviation for Magx is " + str(devX[index] ))
+print("The deviation for Magy is " + str(devY[index] ))
+print("The deviation for Magz is " + str(devZ[index] ))
 
-factor = 5421.68674699
-print("The bias instability for Wx is " + str(devX[-1] * factor))
-print("The bias instability for Wy is " + str(devY[-1] * factor))
-print("The bias instability for Wz is " + str(devZ[-1] * factor))
+factor = 1/0.664 
+print("The bias instability for Magx is " + str(devX[-1] * factor))
+print("The bias instability for Magy is " + str(devY[-1] * factor))
+print("The bias instability for Magz is " + str(devZ[-1] * factor))

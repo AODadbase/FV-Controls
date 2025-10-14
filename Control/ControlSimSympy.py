@@ -256,9 +256,27 @@ def getABC(t: float):
 #     solution = fsolve(func_with_vec, guess)
 #     return np.array([solution[0], solution[1], solution[2]])    
 
+def sensorNoiseConstants():
+    factor = 1/60
+    oF = 1/3600
+    gyroBias = [0,0,0]
+    gyroInstability = [20.116124137171195 * oF, 28.34293605241209* oF,25.387227350679243* oF]
+    gyroDeviation = [6.6977525311882316*factor,7.733730273458847*factor,7.020108147288731*factor]
+    gyroData = [gyroBias, gyroInstability, gyroDeviation]
+    accelBias = [0,0,0]
+    accelInstability = [287.9041401059671* oF, 88.37148088944824* oF,6.025457263017863* oF]
+    accelDeviation = [0.9840317663439204*factor,0.872408877638351*factor,1.0107562320731507*factor]
+    accelData = [accelBias, accelInstability, accelDeviation]
+    magBias = [0,0,0]
+    magInstability = [1.5945108844195712, 0.8536236163450057,0.8505325349984213]
+    magDeviation = [0.006669083462481435,0.003656134366885892,0.003404344682989913]
+    magData = [magBias, magInstability, magDeviation]
+    return gyroData, accelData, magData
+
 def addSensorNoise(g,time,bias, instability, ARW):
     """g - w1,w2,w3"""
     """Errors are also arrays, one for each"""
+    """Check Units"""
     output = []
     for i in range(3):
         currentBias = instability[i] * time + bias[i]
