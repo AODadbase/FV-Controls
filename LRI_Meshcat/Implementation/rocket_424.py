@@ -375,22 +375,22 @@ class Simulator:
         # Get aerodynamic forces and torques
         f_x, f_y, f_z, tau_x, tau_y, tau_z = 0, 0, 0, 0, 0, 0 # <-- #FIXME: replace with your own model!
 
-        # # Apply aerodynamic forces
-        # self.bullet_client.applyExternalForce(
-        #     self.robot_id,
-        #     -1,
-        #     np.array([f_x, f_y, f_z]),
-        #     np.array([0., 0., 0.]),
-        #     self.bullet_client.LINK_FRAME,
-        # )
+        # Apply aerodynamic forces
+        self.bullet_client.applyExternalForce(
+            self.robot_id,
+            -1,
+            np.array([f_x, f_y, f_z]),
+            np.array([0., 0., 0.]),
+            self.bullet_client.LINK_FRAME,
+        )
 
-        # # Apply aerodynamic torques
-        # self.bullet_client.applyExternalTorque(
-        #     self.robot_id,
-        #     -1,
-        #     np.array([tau_x, tau_y, tau_z]),
-        #     self.bullet_client.LINK_FRAME,
-        # )
+        # Apply aerodynamic torques
+        self.bullet_client.applyExternalTorque(
+            self.robot_id,
+            -1,
+            np.array([tau_x, tau_y, tau_z]),
+            self.bullet_client.LINK_FRAME,
+        )
 
         # Log data
         self.data['t'].append(self.t)
