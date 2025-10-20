@@ -33,7 +33,8 @@ class ourFins(TrapezoidalFins):
             name,
         )
 
-        self.aileronAngles = np.array([0,0,0,0])
+        # self.aileronAngles = np.array([0,0,0,0])
+        self.aileronAngles = np.array([0.0])
 
     def compute_forces_and_moments(
         self,
@@ -66,13 +67,13 @@ class ourFins(TrapezoidalFins):
         return R1, R2, R3, M1, M2, M3
 
     def computeAileronMoment(self, stream_velocity):
-        alphas = self.aileronAngles
-        # 1000 * (alphas[1] + alphas[3] - alphas[2] - alphas [0])
-        # return  0.02 * (alphas[1] + alphas[3] - alphas[2] - alphas [0]) * vScale
-        Mz = alphas[0]/8 * (4.11522634e-09*(stream_velocity[2]**3) 
-                            -1.04938272e-06*(stream_velocity[2]**2) 
-                            + 3.35185185e-04*stream_velocity[2] 
-                            -1.22222222e-02)
+        delta1 = self.aileronAngles
+        # 1000 * (delta1[1] + delta1[3] - delta1[2] - delta1[0])
+        # return  0.02 * (delta1[1] + delta1[3] - delta1[2] - delta1[0]) * vScale
+        Mz = np.rad2deg(delta1[0])/8 * (-2.21e-09*(stream_velocity[2]**3) 
+                            + 1.58e-06*(stream_velocity[2]**2) 
+                            + 4.18e-06*stream_velocity[2] 
+                            )
         return Mz
 
 

@@ -15,6 +15,8 @@ from rocketpy.control.controller import _Controller
 from Control.ControlSimulation import PhysicsCalc
 import matplotlib.pyplot as plt
 
+from Control.ControlSimSympy import Controls
+
 
 #No constants in yet (I forgot what goes for)
 def generateConstants():
@@ -40,6 +42,98 @@ def rollControlFunction(
         finTabs.aileronAngles   
     )
 
+def rocketpy_state_to_xhat(state):
+    # unpack RocketPy state
+    vx, vy, vz   = state[3],  state[4],  state[5]
+    e0, e1, e2, e3 = state[6],  state[7],  state[8],  state[9]   # quaternion (scalar-first)
+    wx, wy, wz   = state[10], state[11], state[12]
+
+    # your convention is [w1 w2 w3 v1 v2 v3 qw qx qy qz]
+    return np.array([wx, wy, wz, vx, vy, vz, e0, e1, e2, e3], dtype=float)
+
+def make_measurement_from_rocketpy(state, sensors=None):
+    """
+    Returns y_k to feed the observer.
+    Choose y to match your C(x,u) output definition.
+    Example: measure body angular rates and vertical velocity (4 outputs).
+    Replace with ctrl.deriveSensorModel(...) if you already have that.
+    """
+    wx, wy, wz = state[10], state[11], state[12]
+    vz = state[5]
+
+    y = 
+
+    # If you’ve attached RocketPy sensors, you can instead read them:
+    # if sensors: y = build_from([s.measurement for s in sensors])
+    # Or, if you already implemented: y = ctrl.deriveSensorModel(time, state, sensors)
+    return y
+
+def controls_function(
+        t: float,
+        sampling_rate: float,
+        state: list,
+        state_history: list,
+        observed_variables: list,
+        interactive_objects: list,
+    ):
+    """
+    An user-defined function responsible for controlling the simulation.
+    This function is expected to take the following arguments, in order:
+
+        1. `time` (float): The current simulation time in seconds.
+        2. `sampling_rate` (float): The rate at which the controller
+            function is called, measured in Hertz (Hz).
+        3. `state` (list): The state vector of the simulation, structured as
+            `[x, y, z, vx, vy, vz, e0, e1, e2, e3, wx, wy, wz]`.
+        4. `state_history` (list): A record of the rocket's state at each
+            step throughout the simulation. The state_history is organized as
+            a list of lists, with each sublist containing a state vector. The
+            last item in the list always corresponds to the previous state
+            vector, providing a chronological sequence of the rocket's
+            evolving states.
+        5. `observed_variables` (list): A list containing the variables that
+            the controller function returns. The return of each controller
+            function call is appended to the observed_variables list. The
+            initial value in the first step of the simulation of this list is
+            provided by the `initial_observed_variables` argument.
+        6. `interactive_objects` (list): A list containing the objects that
+            the controller function can interact with. The objects are
+            listed in the same order as they are provided in the
+            `interactive_objects`.
+        7. `sensors` (list): A list of sensors that are attached to the
+            rocket. The most recent measurements of the sensors are provided
+            with the ``sensor.measurement`` attribute. The sensors are
+            listed in the same order as they are added to the rocket
+
+    This function will be called during the simulation at the specified
+    sampling rate. The function should evaluate and change the interactive
+    objects as needed. The function return statement can be used to save
+    relevant information in the `observed_variables` list.
+
+    .. note:: The function will be called according to the sampling rate
+    specified.
+    """
+    sampling_rate = 20.0 # Hz
+    dt = 1.0 / sampling_rate # seconds
+    ## Define gain matrix ##
+    Kmax = 100
+    Kmin = 17.5
+
+    Ks = np.array([Kmax, Kmin])  # Gain scheduling based on altitude
+
+    ## Define initial conditions ##
+    xhat0 = np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0]) # Initial state estimate
+    u0 = np.array([0])
+    controller = Controls(
+        dt=dt,
+        Ks=Ks,
+        x0=xhat0,
+        u0=u0,
+    )
+    controller.deriveEOM(post_burnout=False)
+    controller.deriveEOM(post_burnout=True)
+    controller.test_AB(t, rocketpy_state_to_xhat(state), u=u0)
+    state_history = controller.states
 
 
 #Makes a rocket with rocket py
