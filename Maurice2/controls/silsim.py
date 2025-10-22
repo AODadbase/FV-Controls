@@ -249,7 +249,8 @@ class SilSim:
         )
 
         maurice2.add_surfaces(ourNewFins, 0.01*(117-92.7))
-        maurice2._add_controllers(rpy_controller)
+        # Commented out to first verify the rocket flies correctly compared to the OpenRocket
+        # maurice2._add_controllers(rpy_controller)
 
         return maurice2, rpy_controller
     
