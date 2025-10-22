@@ -1,5 +1,4 @@
 from sympy import *
-from sympy.algebras.quaternion import Quaternion
 import numpy as np
 import pandas as pd
 import os
@@ -34,8 +33,8 @@ class Controls:
         self.t_launch_rail_clearance = t_launch_rail_clearance # seconds
         self.prop_mass = prop_mass # kg
         self.L_ne = L_ne # m
-        # self.csv_path = os.path.join(os.path.dirname(__file__), "important_data.csv")
-        self.csv_path = "/Users/dsong/Library/CloudStorage/OneDrive-UniversityofIllinois-Urbana/Club Stuff/LRI/FV-Controls/Control/important_data.csv"
+        self.csv_path = "Maurice2/data/openrocket_data.csv"
+        # self.csv_path = "/Users/dsong/Library/CloudStorage/OneDrive-UniversityofIllinois-Urbana/Club Stuff/LRI/FV-Controls/Control/openrocket_data.csv"
         self.A : Matrix = None
         self.B : Matrix = None
         self.C : Matrix = None
@@ -58,6 +57,7 @@ class Controls:
         self.inputs = [self.u0]
         self.As = []
         self.Bs = []
+
 
     def setRocketParams(self, t_motor_burnout: float, t_estimated_apogee: float, t_launch_rail_clearance: float, prop_mass: float):
         """Set the rocket parameters.
@@ -192,7 +192,7 @@ class Controls:
 
         constants = dict()
         ## Post burnout constants ##
-        I = Matrix([0.004, 0.004, 0.29]) # Post burnout inertia values from OpenRocket, kg*m^2
+        I = Matrix([0.004, 0.004, 0.287]) # Post burnout inertia values from OpenRocket, kg*m^2
         m = 2.589  # Post burnout mass from OpenRocket, kg
         CG = 63.5/100  # Post burnout CG from OpenRocket, m
         T = Matrix([0., 0., 0.])  # N
@@ -221,28 +221,107 @@ class Controls:
         
         return constants
 
-
-    def getAileronMoment(self, delta1: Symbol, v3: Symbol):
-        """Get the aileron moment based on the aileron angle.
+    
+    def quat_to_euler_xyz(self, q: np.ndarray, degrees=False, eps=1e-9):
+        """
+        Convert quaternion [w, x, y, z] to Euler angles (theta, phi, psi)
+        using the intrinsic XYZ convention:
+            theta: rotation about x (pitch)
+            phi:   rotation about y (yaw)
+            psi:   rotation about z (roll)
+        Such that: R = Rz(psi) @ Ry(phi) @ Rx(theta)
 
         Args:
-            delta1 (float): The aileron angle in radians.
+            q (array-like): Quaternion [w, x, y, z].
+            degrees (bool): If True, return angles in degrees. (default: radians)
+            eps (float):    Small epsilon to handle numerical edge cases.
 
         Returns:
-            Matrix: The symbolic moment vector [Mx, My, Mz] function of the aileron angle and rocket's vertical velocity.
+            (theta, phi, psi): tuple of floats
         """
-        
-        M1, M2 = 0, 0
-        # Verify later with data points
-        M3 = deg(delta1)/8 * (-2.21e-09*(v3**3) 
-                        + 1.58e-06*(v3**2) 
-                        + 4.18e-06*v3 
-                        ) # v3 = vertical velocity, Mz = roll moment
+        # normalize to be safe
+        n = np.linalg.norm(q)
+        if n < eps:
+            raise ValueError("Zero-norm quaternion")
+        w = q[0] / n
+        x = q[1] / n
+        y = q[2] / n
+        z = q[3] / n
 
-        return Matrix([M1, M2, M3])
-        # -8.26e-05 + 4.18e-06x + 1.58e-06x^2 + -2.21e-09x^3
+        # Rotation matrix from quaternion (world<-body)
+        # R[i,j] = row i, column j
+        xx, yy, zz = x*x, y*y, z*z
+        wx, wy, wz = w*x, w*y, w*z
+        xy, xz, yz = x*y, x*z, y*z
 
+        R = np.array([
+            [1 - 2*(yy + zz),   2*(xy - wz),       2*(xz + wy)],
+            [2*(xy + wz),       1 - 2*(xx + zz),   2*(yz - wx)],
+            [2*(xz - wy),       2*(yz + wx),       1 - 2*(xx + yy)]
+        ])
+
+        # Extract for intrinsic XYZ (q = qz(psi) ⊗ qy(phi) ⊗ qx(theta))
+        # From R = Rz(psi) Ry(phi) Rx(theta):
+        #   phi   = asin(-R[2,0])
+        #   theta = atan2(R[2,1], R[2,2])
+        #   psi   = atan2(R[1,0], R[0,0])
+        #
+        # Handle numerical drift by clamping asin argument.
+        s = -R[2, 0]
+        s = np.clip(s, -1.0, 1.0)
+        phi   = np.arcsin(s)
+        theta = np.arctan2(R[2, 1], R[2, 2])
+
+        # If cos(phi) ~ 0 (gimbal lock), fall back to a stable computation for psi
+        if abs(np.cos(phi)) < eps:
+            # At gimbal lock, theta and psi are coupled; choose a consistent psi:
+            # Use elements that remain well-defined:
+            # when cos(phi) ~ 0, use psi from atan2(-R[0,1], R[1,1])
+            psi = np.arctan2(-R[0, 1], R[1, 1])
+        else:
+            psi = np.arctan2(R[1, 0], R[0, 0])
+
+        if degrees:
+            return np.degrees(theta), np.degrees(phi), np.degrees(psi)
+        return theta, phi, psi
+
+
+    def euler_to_quat_xyz(self, theta, phi, psi, degrees=False):
+        """
+        Convert Euler angles to a quaternion using intrinsic XYZ:
+            - theta: rotation about x (pitch)
+            - phi:   rotation about y (yaw)
+            - psi:   rotation about z (roll)
+        Convention: R = Rz(psi) @ Ry(phi) @ Rx(theta)
+        Quaternion is returned as [w, x, y, z].
+
+        Args:
+            theta, phi, psi : floats (radians by default; set degrees=True if in deg)
+            degrees         : if True, inputs are in degrees
+
+        Returns:
+            np.ndarray shape (4,) -> [w, x, y, z]
+        """
+        if degrees:
+            theta, phi, psi = np.radians([theta, phi, psi])
+
+        # half-angles
+        cth, sth = np.cos(theta/2.0), np.sin(theta/2.0)
+        cph, sph = np.cos(phi/2.0),   np.sin(phi/2.0)
+        cps, sps = np.cos(psi/2.0),   np.sin(psi/2.0)
+
+        # intrinsic XYZ closed form (q = qz * qy * qx), scalar-first
+        qw =  cph*cps*cth + sph*sps*sth
+        qx = -sph*sps*cth + sth*cph*cps
+        qy =  sph*cps*cth + sps*sth*cph
+        qz = -sph*sth*cps + sps*cph*cth
+
+        q = np.array([qw, qx, qy, qz], dtype=float)
+        # normalize to guard against numerical drift
+        q /= np.linalg.norm(q)
+        return q
     
+
     def R_BW_from_q(self, qw, qx, qy, qz):
         """Convert a quaternion to a rotation matrix. World to body frame.
 
@@ -266,6 +345,27 @@ class Controls:
             [2*(xy-wz),     1-2*(xx+zz), 2*(yz+wx)],
             [2*(xz+wy),     2*(yz-wx),   1-2*(xx+yy)]
         ])
+
+    
+    def getAileronMoment(self, delta1: Symbol, v3: Symbol):
+        """Get the aileron moment based on the aileron angle.
+
+        Args:
+            delta1 (float): The aileron angle in radians.
+
+        Returns:
+            Matrix: The symbolic moment vector [Mx, My, Mz] function of the aileron angle and rocket's vertical velocity.
+        """
+        
+        M1, M2 = 0, 0
+        # Verify later with data points
+        M3 = deg(delta1)/8 * (-2.21e-09*(v3**3) 
+                        + 1.58e-06*(v3**2) 
+                        + 4.18e-06*v3 
+                        ) # v3 = vertical velocity, Mz = roll moment
+
+        return Matrix([M1, M2, M3])
+        # -8.26e-05 + 4.18e-06x + 1.58e-06x^2 + -2.21e-09x^3
 
 
     def deriveEOM(self, post_burnout: bool):
@@ -446,8 +546,13 @@ class Controls:
             t (float): The time in seconds.
             xhat (np.array): The state estimation vector as a numpy array.
             u (np.array): The input vector as a numpy array.
+        ## Sets:
+            self.A (Matrix): The A matrix.
+            self.B (Matrix): The B matrix.
+            self.f_params (Matrix): The parameterized equations of motion with time-variant constants.
+            self.f_subs (Matrix): The substituted equations of motion at a state.
         Returns:
-            tuple: A tuple containing the symbolic f matrix, f evaluated at the operating state xhat and input u, and the A and B matrices evaluated at the operating state xhat and input u.
+            None
         """
         if self.f_preburnout is None or self.f_postburnout is None or self.vars is None:
             print("Equations of motion have not been derived yet. Call deriveEOM() first on pre- and post-burnout.")
@@ -531,15 +636,73 @@ class Controls:
         self.Bs.append(B)
 
 
-    def setK(self, K: np.ndarray):
-        """Set the gain matrix K.
+    def control_law(self, xhat: np.array, t: float):
+        """Compute the control input based on the current state estimate and gain matrix.
 
         Args:
-            K (np.ndarray): The gain matrix.
+            xhat (np.array): The estimated state vector.
+            t (float): The current time in seconds.
+        Returns:
+            np.ndarray: The computed gain matrix K.
         """
-        self.K = K
+        ## Gain scheduling based on vertical velocity ##
+        v3 = xhat[5]
 
-    ## TODO: Fix this to account for velocity measurements later ##
+        # Preburnout
+        Kmax = self.Ks[0]
+        Kmin = self.Ks[1]
+        v3_mid = 100 # m/s, tune as necessary
+        if (t < self.t_motor_burnout):
+            K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/7))
+
+        # Postburnout
+        else:
+            Kmax = self.Ks[2]
+            Kmin = self.Ks[3]
+            v3_mid = 80 # m/s, tune as necessary hiii dan :3
+            K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/6))
+        K = np.zeros((1, 10))
+        K[0][2] = K_val
+
+        return K
+
+
+    def get_thrust_accel(self, t: float):
+        """Get the thrust acceleration at time t.
+
+        Args:
+            t (float): The time in seconds.
+
+        Returns:
+            np.array: The thrust acceleration vector as a numpy array.
+        """
+        thrust = self.getTimeConstants(t)["thrust"]
+        m = self.getTimeConstants(t)["mass"]
+        a_thrust = np.zeros(10)
+        a_thrust[3] = thrust[0] / m
+        a_thrust[4] = thrust[1] / m
+        a_thrust[5] = thrust[2] / m
+        return a_thrust
+
+
+    def get_gravity_accel(self, xhat: np.array):
+        """Get the gravity acceleration in body frame at time t.
+
+        Args:
+            xhat (np.array): The current state estimate as a numpy array.
+
+        Returns:
+            np.array: The gravity acceleration vector as a numpy array.
+        """
+        g = np.array([0.0, 0.0, -9.81])
+        qw, qx, qy, qz = xhat[6], xhat[7], xhat[8], xhat[9]
+        R_world_to_body = np.array(self.R_BW_from_q(qw, qx, qy, qz)).astype(np.float64)
+        g_body = R_world_to_body @ g
+        a_gravity = np.zeros(10)
+        a_gravity[3:6] = g_body
+        return a_gravity
+
+    ## TODO: Fix this to account for velocity measurements later?? ##
     def computeC(self, xhat: np.ndarray, u: np.ndarray):
         """Compute the control input based on the current state, estimated state, and gain matrix.
 
@@ -632,106 +795,6 @@ class Controls:
         self.L = L
 
 
-    def quat_to_euler_xyz(self, q: np.ndarray, degrees=False, eps=1e-9):
-        """
-        Convert quaternion [w, x, y, z] to Euler angles (theta, phi, psi)
-        using the intrinsic XYZ convention:
-            theta: rotation about x (pitch)
-            phi:   rotation about y (yaw)
-            psi:   rotation about z (roll)
-        Such that: R = Rz(psi) @ Ry(phi) @ Rx(theta)
-
-        Args:
-            q (array-like): Quaternion [w, x, y, z].
-            degrees (bool): If True, return angles in degrees. (default: radians)
-            eps (float):    Small epsilon to handle numerical edge cases.
-
-        Returns:
-            (theta, phi, psi): tuple of floats
-        """
-        # normalize to be safe
-        n = np.linalg.norm(q)
-        if n < eps:
-            raise ValueError("Zero-norm quaternion")
-        w = q[0] / n
-        x = q[1] / n
-        y = q[2] / n
-        z = q[3] / n
-
-        # Rotation matrix from quaternion (world<-body)
-        # R[i,j] = row i, column j
-        xx, yy, zz = x*x, y*y, z*z
-        wx, wy, wz = w*x, w*y, w*z
-        xy, xz, yz = x*y, x*z, y*z
-
-        R = np.array([
-            [1 - 2*(yy + zz),   2*(xy - wz),       2*(xz + wy)],
-            [2*(xy + wz),       1 - 2*(xx + zz),   2*(yz - wx)],
-            [2*(xz - wy),       2*(yz + wx),       1 - 2*(xx + yy)]
-        ])
-
-        # Extract for intrinsic XYZ (q = qz(psi) ⊗ qy(phi) ⊗ qx(theta))
-        # From R = Rz(psi) Ry(phi) Rx(theta):
-        #   phi   = asin(-R[2,0])
-        #   theta = atan2(R[2,1], R[2,2])
-        #   psi   = atan2(R[1,0], R[0,0])
-        #
-        # Handle numerical drift by clamping asin argument.
-        s = -R[2, 0]
-        s = np.clip(s, -1.0, 1.0)
-        phi   = np.arcsin(s)
-        theta = np.arctan2(R[2, 1], R[2, 2])
-
-        # If cos(phi) ~ 0 (gimbal lock), fall back to a stable computation for psi
-        if abs(np.cos(phi)) < eps:
-            # At gimbal lock, theta and psi are coupled; choose a consistent psi:
-            # Use elements that remain well-defined:
-            # when cos(phi) ~ 0, use psi from atan2(-R[0,1], R[1,1])
-            psi = np.arctan2(-R[0, 1], R[1, 1])
-        else:
-            psi = np.arctan2(R[1, 0], R[0, 0])
-
-        if degrees:
-            return np.degrees(theta), np.degrees(phi), np.degrees(psi)
-        return theta, phi, psi
-
-
-    def euler_to_quat_xyz(self, theta, phi, psi, degrees=False):
-        """
-        Convert Euler angles to a quaternion using intrinsic XYZ:
-            - theta: rotation about x (pitch)
-            - phi:   rotation about y (yaw)
-            - psi:   rotation about z (roll)
-        Convention: R = Rz(psi) @ Ry(phi) @ Rx(theta)
-        Quaternion is returned as [w, x, y, z].
-
-        Args:
-            theta, phi, psi : floats (radians by default; set degrees=True if in deg)
-            degrees         : if True, inputs are in degrees
-
-        Returns:
-            np.ndarray shape (4,) -> [w, x, y, z]
-        """
-        if degrees:
-            theta, phi, psi = np.radians([theta, phi, psi])
-
-        # half-angles
-        cth, sth = np.cos(theta/2.0), np.sin(theta/2.0)
-        cph, sph = np.cos(phi/2.0),   np.sin(phi/2.0)
-        cps, sps = np.cos(psi/2.0),   np.sin(psi/2.0)
-
-        # intrinsic XYZ closed form (q = qz * qy * qx), scalar-first
-        qw =  cph*cps*cth + sph*sps*sth
-        qx = -sph*sps*cth + sth*cph*cps
-        qy =  sph*cps*cth + sps*sth*cph
-        qz = -sph*sth*cps + sps*cph*cth
-
-        q = np.array([qw, qx, qy, qz], dtype=float)
-        # normalize to guard against numerical drift
-        q /= np.linalg.norm(q)
-        return q
-
-
     def deriveSensorModels(self,t: float,
                            w1: float, w2: float, w3: float,
                            theta: float, phi: float, psi: float):
@@ -791,109 +854,8 @@ class Controls:
         g = np.array([gw1, gw2, gw3, q[0], q[1], q[2], q[3]])
 
         return g
-
-
-    def run(self, t: float, xhat: np.array, u: np.array):
-        """Run the state estimator recursively until the estimated apogee time is reached.
-        Args:
-            t (float): The current time in seconds.
-            xhat (np.array): The current state estimate as a numpy array.
-            u (np.array): The current input as a numpy array.
-        Returns:
-            np.array: The updated state estimate as a numpy array.
-        """
-        if self.K is None:
-            print("Gain matrix K has not been set. Call setK() first or initialize it in the constructor.")
-        if self.L is None:
-            print("Observer gain matrix L has not been set. Call setL() first or initialize it in the constructor or call buildL().")
-        print(f"xhat: {xhat}")
-        ## Compute A and B matrices at current state and input ##
-        self.computeAB(t, xhat, u)
-        self.computeC(xhat, u)
-
-        ## Convert symbolic matrices to numerical numpy arrays ##
-        A = np.array(self.A.n()).astype(np.float64)
-        B = np.array(self.B.n()).astype(np.float64)
-        C = np.array(self.C.n()).astype(np.float64)
-
-        # self.x0[2] = 0  # Desired roll rate is 0
-        # self.x0[5] = xhat[5] # Desired vertical velocity is current vertical velocity
-        x_des = self.x0.copy()
-        x_des[2] = 0.0
-        x_des[5] = float(xhat[5])
-        
-        u = -self.K @ (xhat - x_des) + self.u0  # State feedback control law
-        u = np.clip(u, np.deg2rad(-8), np.deg2rad(8))  # Limit aileron deflection to +/- 8 degrees
-
-        theta, phi, psi = self.quat_to_euler_xyz(xhat[6:10])  # Convert quaternion to Euler angles
-        y = self.deriveSensorModels(t, xhat[0], xhat[1], xhat[2],
-                                    theta, phi, psi)  # Simulated sensor measurements
-        f_subs = np.array(self.f_subs, dtype=float).reshape(-1)
-        # d = f_subs - (A @ xhat + B @ u)  # Disturbance/uncertainty term
-        # xdot = f_subs - self.L @ (C @ xhat - y)
-        xdot = f_subs
-        print(f"xdot: {xdot}")
-
-        # v3 = pd.read_csv(self.csv_path)["Vertical velocity (m/s)"]
-        # w3 = pd.read_csv(self.csv_path)["Roll rate (°/s)"]
-        # times = pd.read_csv(self.csv_path)["# Time (s)"]
-        # xhat[5] = np.interp(t, times, v3)  # Update vertical velocity from data for testing
-        # if np.isclose(t % 3.0 + self.dt, 0.0, atol=self.dt):
-        #     xhat[2] = np.interp(t, times, w3) # Inject roll rate disturbance every 3 seconds for testing
-        #     xhat[2] = np.random.uniform(np.deg2rad(-1e-4), np.deg2rad(1e-4)) # Small random disturbance
-        #     print(f"Injecting roll rate disturbance: {np.rad2deg(xhat[2]):.6f} deg/s")
-        # if (np.isclose(t % 1.0, 0.0, atol=self.dt) & (t > 1.0)):
-        #     xhat[0] = np.random.uniform(-1e-2, 1e-2) # Small random disturbance in pitch rate
-        #     xhat[1] = np.random.uniform(-1e-2, 1e-2) # Small random disturbance in yaw rate
-        #     print(f"Injecting pitch/yaw rate disturbance: p: {np.rad2deg(xhat[0]):.6f} deg/s, r: {np.rad2deg(xhat[1]):.6f} deg/s")
-        #     xhat[3] = np.random.uniform(-1e0, 1e0) # Small random disturbance in lateral velocity
-        #     xhat[4] = np.random.uniform(-1e0, 1e0) # Small random disturbance in lateral velocity
-        #     print(f"Injecting lateral velocity disturbance: v1: {xhat[3]:.6f} m/s, v2: {xhat[4]:.6f} m/s")
-
-        ## Update state estimate ##
-        xhat = xhat + xdot * self.dt
-        xhat[6:10] /= np.linalg.norm(xhat[6:10])  # Normalize quaternion
-
-        ## Logging ##
-        self.states.append(xhat)
-        self.inputs.append(u)
-
-        t = t + self.dt
-        print(f"t: {t:.3f}")
-        return self.run(t, xhat, u) if t < self.t_estimated_apogee else None
     
-    def test_run(self, t: float, xhat: np.array, u: np.array):
-        """Test run for a single iteration of the state estimator.
 
-        Args:
-            t (float): The current time in seconds.
-            xhat (np.array): The current state estimate as a numpy array.
-            u (np.array): The current input as a numpy array.
-        """
-        self.computeAB(t, xhat, u)
-        print(f"xhat: {xhat}")
-
-        f_subs = np.array(self.f_subs, dtype=float).reshape(-1)
-        xdot = f_subs
-        print(f"xdot: {xdot}")
-
-        xhat = xhat + xdot * self.dt
-        xhat[6:10] /= np.linalg.norm(xhat[6:10])
-        
-        x_des = self.x0.copy()
-        x_des[2] = 0.0
-        x_des[5] = float(xhat[5])
-        
-        u = -self.K @ (xhat - x_des) + self.u0  # State feedback control law
-        u = np.clip(u, np.deg2rad(-8), np.deg2rad(8))  # Limit aileron deflection to +/- 8 degrees
-        
-        ## Logging ##
-        self.states.append(xhat)
-        self.inputs.append(u)
-
-        t = t + self.dt
-        return self.run(t, xhat, u) if t < self.t_estimated_apogee else None
-    
     def _f(self, t, x, u):
         # assumes you already called computeAB/computeC to refresh self.f_subs
         f = np.asarray(self.f_subs, float).reshape(-1)
@@ -907,7 +869,7 @@ class Controls:
         k4 = self._f(t+dt,    x + dt*k3,     u)
         return x + (dt/6.)*(k1 + 2*k2 + 2*k3 + k4)
     
-    def RUNPLS(self, t, xhat: np.array, u: np.array):
+    def run_rk4(self, t, xhat: np.array, u: np.array):
         """Runge-Kutta 4th order integration of the state estimator recursively until the estimated apogee time is reached.
         Args:
             t (float): The current time in seconds.
@@ -938,6 +900,7 @@ class Controls:
             t += self.dt
             print(f"t: {t:.3f}")
 
+
     def test_eom(self, t: float, xhat: np.array, u: np.array):
         """Test the equations of motion by computing f_subs at the given state and input.
 
@@ -948,6 +911,7 @@ class Controls:
         """
         while t < self.t_estimated_apogee:
             print(f"t: {t:.3f}, xhat: {xhat}, u: {u}")
+
             self.computeAB(t, xhat, u)
             f_subs = np.array(self.f_subs, dtype=float).reshape(-1)
             xhat = xhat + f_subs * self.dt
@@ -959,41 +923,7 @@ class Controls:
             if f_subs[5] < 0:
                 print("Warning: Longitudinal velocity v3 is negative at time t =", t)
                 print(f"t: {t:.3f}, xhat: {xhat}, u: {u}")
-            # return
 
-    def get_thrust_accel(self, t: float):
-        """Get the thrust acceleration at time t.
-
-        Args:
-            t (float): The time in seconds.
-
-        Returns:
-            np.array: The thrust acceleration vector as a numpy array.
-        """
-        thrust = self.getTimeConstants(t)["thrust"]
-        m = self.getTimeConstants(t)["mass"]
-        a_thrust = np.zeros(10)
-        a_thrust[3] = thrust[0] / m
-        a_thrust[4] = thrust[1] / m
-        a_thrust[5] = thrust[2] / m
-        return a_thrust
-
-    def get_gravity_accel(self, xhat: np.array):
-        """Get the gravity acceleration in body frame at time t.
-
-        Args:
-            xhat (np.array): The current state estimate as a numpy array.
-
-        Returns:
-            np.array: The gravity acceleration vector as a numpy array.
-        """
-        g = np.array([0.0, 0.0, -9.81])
-        qw, qx, qy, qz = xhat[6], xhat[7], xhat[8], xhat[9]
-        R_world_to_body = np.array(self.R_BW_from_q(qw, qx, qy, qz)).astype(np.float64)
-        g_body = R_world_to_body @ g
-        a_gravity = np.zeros(10)
-        a_gravity[3:6] = g_body
-        return a_gravity
 
     def test_AB(self, t: float, xhat: np.array, u: np.array):
         """Test the equations of motion by computing f_subs at the given state and input.
@@ -1013,23 +943,14 @@ class Controls:
 
             ## Add back thrust and gravity terms (differentiated to 0 in computing A) ##
 
-            ## Get thrust and mass at time t ##
-            # thrust = self.getTimeConstants(t)["thrust"]
-            # m = self.getTimeConstants(t)["mass"]
-            # T = np.zeros_like(A @ xhat)
-            # T[3] = thrust[0]
-            # T[4] = thrust[1]
-            # T[5] = thrust[2]
-            # self.T = T
-
-            ## Gravity in body frame ##
-            g_world = np.array([0.0, 0.0, -9.81])
-            qw, qx, qy, qz = xhat[6], xhat[7], xhat[8], xhat[9]
-            R_world_to_body = np.array(self.R_BW_from_q(qw, qx, qy, qz)).astype(np.float64)  # Rotation matrix from world to body frame
-            g = R_world_to_body @ g_world  # Transform gravitational force to body frame
-            g_size = np.zeros_like(A @ xhat)
-            g_size[3:6] = g
-            self.g = g_size
+            # ## Gravity in body frame ##
+            # g_world = np.array([0.0, 0.0, -9.81])
+            # qw, qx, qy, qz = xhat[6], xhat[7], xhat[8], xhat[9]
+            # R_world_to_body = np.array(self.R_BW_from_q(qw, qx, qy, qz)).astype(np.float64)  # Rotation matrix from world to body frame
+            # g = R_world_to_body @ g_world  # Transform gravitational force to body frame
+            # g_size = np.zeros_like(A @ xhat)
+            # g_size[3:6] = g
+            # # self.g = g_size
             
             ## Control Law ##
             theta, phi, psi = self.quat_to_euler_xyz(xhat[6:10])  # Convert quaternion to Euler angles
@@ -1046,52 +967,12 @@ class Controls:
             self.states.append(xhat)
             self.inputs.append(u)
             t = t + self.dt
-            print(f"K: {K[0][2]}")
-
-
-    def control_law(self, xhat: np.array, t: float):
-        """Compute the control input based on the current state estimate and gain matrix.
-
-        Args:
-            xhat (np.array): The estimated state vector.
-            t (float): The current time in seconds.
-        Returns:
-            np.ndarray: The computed gain matrix K.
-        """
-        # Gain scheduling based on vertical velocity
-        # if (xhat[5] < 120):
-        #     K = self.Ks[0]
-        # elif (xhat[5] < 300):
-        #     K = self.Ks[1]
-        # # elif (xhat[5] < 175):
-        # #     K = self.Ks[2]
-        # else:
-        #     K = self.Ks[3]
-        v3 = xhat[5]
-        Kmax = self.Ks[0]
-        Kmin = self.Ks[1]
-        v3_mid = 100 # m/s, tune as necessary
-        if (t < self.t_motor_burnout):
-            K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/7))
-        # BUG: TAKE INPUT FROM CONTROLS CLASS
-        else:
-            Kmax = self.Ks[2]
-            Kmin = self.Ks[3]
-            v3_mid = 80 # m/s, tune as necessary hiii dan :3
-            K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/6))
-        K = np.zeros((1, 10))
-        K[0][2] = K_val
-
-        return K
+            # print(f"K: {K[0][2]}")
         
-# main() doesn't work yet, just a placeholder for now for future testing
+# For testing
 def main():
     controls = Controls()
-    A, B = controls.getAB(0, 0)
-    print("A Matrix:")
-    print(A)
-    print("B Matrix:")
-    print(B)
+    return
 
 if __name__ == "__main__":
     main()
