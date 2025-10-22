@@ -52,7 +52,7 @@ class Fins(TrapezoidalFins):
         )
 
         M3 = M3 + self.computeAileronMoment(stream_velocity)
-        otherM = self.computeOtherAileronMoment(stream_velocity)
+        otherM = self.computeOtherAileronMoment()
         M2 = M2 + otherM[1]
         M1 = M1 + otherM[1]
 

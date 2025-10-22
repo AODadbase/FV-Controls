@@ -378,7 +378,6 @@ def main():
     Ks = np.array([Kmax_preburnout, Kmin_preburnout, K_max_postburnout, K_min_postburnout])  # Gain scheduling based on altitude
 
     ## Define initial conditions ##
-    # t0 = 0.0
     xhat0 = np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0]) # Initial state estimate
     u0 = np.array([0])
     sampling_rate = 20.0  # Hz
