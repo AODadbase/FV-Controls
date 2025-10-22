@@ -1073,9 +1073,10 @@ class Controls:
         v3_mid = 100 # m/s, tune as necessary
         if (t < self.t_motor_burnout):
             K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/7))
+        # BUG: TAKE INPUT FROM CONTROLS CLASS
         else:
-            Kmax = 85
-            Kmin = 17.5
+            Kmax = self.Ks[2]
+            Kmin = self.Ks[3]
             v3_mid = 80 # m/s, tune as necessary hiii dan :3
             K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/6))
         K = np.zeros((1, 10))

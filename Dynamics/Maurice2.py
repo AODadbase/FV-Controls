@@ -148,12 +148,12 @@ class SilSim:
         accel_T = self.controller.get_thrust_accel(t=time)
         accel_g = self.controller.get_gravity_accel(xhat=xhat)
         xhatdot = A @ xhat + B @ u_prev + accel_T + accel_g \
-                - L @ (C @ xhat - y)
+                # - L @ (C @ xhat - y)
         xhat = xhat + xhatdot * self.controller.dt
         xhat[6:10] /= np.linalg.norm(xhat[6:10])
         u = np.clip(-K @ (xhat - self.controller.x0) + self.controller.u0, np.deg2rad(-8), np.deg2rad(8))
+        u = np.array([0.0]) # Disable control for testing
         fins.aileronAngles = u
-        # fins.aileronAngles = np.array([0.0])
         self.times.append(time)
         self.inputs.append(np.rad2deg(u[0]))
         self.xhats.append(xhat.tolist())
@@ -258,6 +258,9 @@ class SilSim:
             "alpha1",
             "alpha2",
             "alpha3",
+            "vx",
+            "vy",
+            "vz",
         )
         return flight, controller
 
@@ -327,13 +330,13 @@ class SilSim:
 
 def main():
     ## Define gain matrix ##
-    Kmax = 100 / 500
-    Kmin = 17.5 / 500
+    Kmax_preburnout = 100 / 7e1
+    Kmin_preburnout = 17.5 / 7e1
 
-    Kmax = 0
-    Kmin = 0
+    K_max_postburnout = 85 / 6e1
+    K_min_postburnout = 17.5 / 6e1
 
-    Ks = np.array([Kmax, Kmin])  # Gain scheduling based on altitude
+    Ks = np.array([Kmax_preburnout, Kmin_preburnout, K_max_postburnout, K_min_postburnout])  # Gain scheduling based on altitude
 
     ## Define initial conditions ##
     # t0 = 0.0
@@ -342,10 +345,11 @@ def main():
     sampling_rate = 20.0  # Hz
     dt = 1.0 / sampling_rate
 
-    controller = Controls(Ks=Ks, dt=dt, x0=xhat0, u0=u0)
+    controller = Controls(Ks=Ks, dt=dt, x0=xhat0, u0=u0, t_launch_rail_clearance=0.308)
     controller.deriveEOM(post_burnout=False)
     controller.deriveEOM(post_burnout=True)
-    controller.buildL(lw=5.0, lqw=1, lqx=2.0, lqy=2.0, lqz=2.0)
+    controller.buildL(lw=5.0, lqw=1.0, lqx=2.0, lqy=2.0, lqz=2.0)
+    # controller.buildL(lw=0.0, lqw=0.0, lqx=0.0, lqy=0.0, lqz=0.0)
     sim = SilSim(sampling_rate=sampling_rate, controller=controller)
     flight, controller = sim.run(sampling_rate=sampling_rate)
     sim.export_data("/Users/dsong/Library/CloudStorage/OneDrive-UniversityofIllinois-Urbana/Club Stuff/LRI/FV-Controls/Maurice2_SIL_Output.csv", overwrite=True)
