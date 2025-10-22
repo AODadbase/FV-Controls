@@ -285,7 +285,7 @@ class SilSim:
         flight.plots.trajectory_3d()
 
         flight.export_data(
-            "rocketpy_output.csv",
+            "Maurice2/data/rocketpy_output.csv",
             "w1",
             "w2",
             "w3",
