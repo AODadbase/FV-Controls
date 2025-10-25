@@ -253,7 +253,7 @@ class SilSim:
         # maurice2._add_controllers(rpy_controller)
 
         return maurice2, rpy_controller
-    
+
 
     def run(self, sampling_rate: float):
         """Run the simulation with the specified sampling rate. Exports RocketPy flight data and state estimations to CSV in the data folder.

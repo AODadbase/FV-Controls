@@ -12,10 +12,10 @@ class Controls:
             prop_mass: float = 0.355, # kg
             L_ne: float = 1.17, # m
             dt: float = 0.01,
+            x0: np.ndarray = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 1.0, 0.0, 0.0, 0.0]), # Initial state
+            u0: np.ndarray = np.array([0.0]), # Initial input
             Ks: np.ndarray = None,
             L: np.ndarray = None,
-            x0 = None,
-            u0 = None
         ):
         """Initialize the Controls class. Rocket body axis is aligned with y-axis.
 
@@ -649,10 +649,10 @@ class Controls:
         v3 = xhat[5]
 
         # Preburnout
-        Kmax = self.Ks[0]
-        Kmin = self.Ks[1]
-        v3_mid = 100 # m/s, tune as necessary
         if (t < self.t_motor_burnout):
+            Kmax = self.Ks[0]
+            Kmin = self.Ks[1]
+            v3_mid = 100 # m/s, tune as necessary
             K_val = Kmin + (Kmax - Kmin) / (1 + exp((v3 - v3_mid)/7))
 
         # Postburnout
@@ -971,8 +971,28 @@ class Controls:
         
 # For testing
 def main():
-    controls = Controls()
-    return
+    ## Define gain matrix ##
+    Kmax_preburnout = 100 / 7e1
+    Kmin_preburnout = 17.5 / 7e1
+
+    K_max_postburnout = 85 / 6e1
+    K_min_postburnout = 17.5 / 6e1
+
+    Ks = np.array([Kmax_preburnout, Kmin_preburnout, K_max_postburnout, K_min_postburnout])  # Gain scheduling based on altitude
+
+    ## Define initial conditions ##
+    t0 = 0.0
+    xhat0 = np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0]) # Initial state estimate
+    u0 = np.array([0])
+    sampling_rate = 20.0  # Hz
+    dt = 1.0 / sampling_rate
+
+    controller = Controls(Ks=Ks, dt=dt, x0=xhat0, u0=u0, t_launch_rail_clearance=0.308)
+    controller.deriveEOM(post_burnout=False)
+    controller.deriveEOM(post_burnout=True)
+    controller.buildL(lw=5.0, lqw=1.0, lqx=2.0, lqy=2.0, lqz=2.0)
+    controller.test_AB(t0, xhat0, u0)
+    print(controller.As)
 
 if __name__ == "__main__":
     main()
