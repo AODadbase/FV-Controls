@@ -305,7 +305,6 @@ class Controls(Dynamics):
         Returns:
             np.ndarray: Control input vector (e.g., fin deflection angles).
         """
-        # Get reference state at current time
         r_t = self.r(t)
         
         # Compute error: e = r - x̂
@@ -325,4 +324,19 @@ class Controls(Dynamics):
             u = np.zeros_like(u)
         
         return u
+    
+
+    def is_motor_burning(self, t: float) -> bool:
+        """Check if the motor is currently burning at time t.
+        
+        Args:
+            t (float): Current time in seconds.
+        
+        True if motor is burning, False otherwise.
+        """
+        if self.t_motor_burnout is None:
+            # No burnout time set, assume motor not burning
+            return False
+        
+        return t < self.t_motor_burnout
     
