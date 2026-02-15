@@ -1,0 +1,26 @@
+Create an automated process to set up new rocket environment
+with all necessary folders, fill-in-the-blank type Jupyter noteobok
+created automatically.
+
+Create getters for rocket params (print rocket params function)
+
+For silsim.py, write plot functions and a controls vs state
+estimation graph
+
+CRITICAL ISSUE: Fix issue with v_wind causing simulation errors!!
+
+Kinda issue: find missing affine term for Ax + Bu that results in
+the simulation ending ~2 seconds before it should (see controls 
+dynamics comparison graph)
+
+CRITICAL ISSUE: silsim simulation with rocketpy doesn't work with
+sensors enabled, must fix for proper silsim and Kalman filter
+verification
+
+Nice-to-have (priority): sensor model dev python file (work off of
+sensor_noise.py and sensor_plots.py) and generalize for easy
+sensor model creation based on a single csv file input of real
+sensor output. If this gets completed, place in
+/FV-Controls/src/sensors (create this directory if not already
+existent). Create a Sensor class in this generalized sensor model
+
