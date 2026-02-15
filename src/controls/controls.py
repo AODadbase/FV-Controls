@@ -229,11 +229,11 @@ class Controls(Dynamics):
     def get_C(self, xhat: np.ndarray):
         """Compute the control input based on the current state, estimated state, and gain matrix.
 
-        Args:
-            xhat (np.ndarray): The estimated state vector.
-        
-        Returns:
-            np.ndarray: The computed control input vector.
+            This function input parameter 
+                xhat (np.ndarray): The estimated state vector.
+
+            It returns 
+                np.ndarray: The computed control input vector.
         """
         if len(self.sensor_vars) == 0:
             raise ValueError("Sensor variables not set. Please use set_sensor_vars() to define sensor output variables.")
@@ -267,59 +267,49 @@ class Controls(Dynamics):
         """Set the observer gain matrix L.
 
         Args:
-            L (np.ndarray): The observer gain matrix.
+            L: The observer gain matrix.
         """
         self.L = L
         
 
     def setK(self, K: Callable):
         """Set the state feedback gain matrix K. User-defined control law as a function of time and state.
-
-        Args:
-            K (Callable): Function that takes in time and state, and returns the gain matrix.
         """
         self.K = K
     
 
     def set_reference(self, r: Callable):
         """Set the reference trajectory for the control system to track.
-        
-        Args:
-            r (Callable): Function that takes time t and returns a reference state vector.
-                          The reference state should be a numpy array with the same dimensions
-                          as the state vector (10 elements: w1, w2, w3, v1, v2, v3, qw, qx, qy, qz).
         """
         self.r = r
     
 
     def compute_control(self, t: float, xhat: np.ndarray) -> np.ndarray:
         """Compute the control input using state feedback control law with saturation.
-        
-        This implements: u = -K(t, xhat) @ (r(t) - xhat)
+        u = -K(t, xhat) @ (r(t) - xhat)
         with saturation to respect actuator limits.
         
-        Args:
-            t (float): Current time in seconds.
-            xhat (np.ndarray): Current estimated state vector (10 elements).
+        This function takes these two parameters:
+            t: Current time in seconds.
+            xhat: Current estimated state vector.
             
-        Returns:
-            np.ndarray: Control input vector (e.g., fin deflection angles).
+        It returns:
+            np.ndarray: Control input vector.
         """
         r_t = self.r(t)
         
-        # Compute error: e = r - x̂
+        # e = r - x̂
         error = r_t - xhat
-        
-        # Get gain matrix (could be time-varying or state-dependent)
+
         K_t = self.K(t, xhat)
         
-        # Control law: u = -K @ e
+        # u = -K @ e
         u = -K_t @ error
         
-        # Apply saturation (actuator limits)
+        # Apply saturation with fin limit
         u = np.clip(u, -self.max_input, self.max_input)
         
-        # IREC compliance: disable control during motor burn
+        # disable control during motor burn
         if self.IREC_COMPLIANT and self.is_motor_burning(t):
             u = np.zeros_like(u)
         
@@ -329,14 +319,41 @@ class Controls(Dynamics):
     def is_motor_burning(self, t: float) -> bool:
         """Check if the motor is currently burning at time t.
         
-        Args:
-            t (float): Current time in seconds.
-        
-        True if motor is burning, False otherwise.
+        It takes
+            t: Current time in seconds.
+        It return
+            True if motor is burning, False otherwise.
         """
         if self.t_motor_burnout is None:
             # No burnout time set, assume motor not burning
             return False
         
         return t < self.t_motor_burnout
+    
+
+    def observer_dynamics(self, t: float, xhat: np.ndarray, u: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """Compute the observer state derivative (Luenberger observer).
+        
+        ẋ̂ = A*x̂ + B*u + L*(y - ŷ)
+        
+        It is the core function, it takes:
+            t: Current time in seconds.
+            xhat: Current estimated state vector.
+            u: Current control input vector.
+            y: Current sensor measurement vector.
+            
+        It returns:
+            np.ndarray: Time derivative of estimated state.
+        """
+        A, B = self.get_AB(t, xhat, u)
+        C = self.get_C(xhat)
+        
+        y_hat = C @ xhat
+        
+        innovation = y - y_hat
+        #L is trust on sensor
+        # ẋ̂ = A*x̂ + B*u + L*(y - ŷ)
+        xhat_dot = A @ xhat + B @ u + self.L @ innovation
+        
+        return xhat_dot
     
