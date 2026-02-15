@@ -2,6 +2,8 @@ import numpy as np
 from sympy import *
 from typing import Callable, Optional
 from dynamics.dynamics import Dynamics
+from scipy.integrate import solve_ivp
+import scipy.signal
 
 class Controls(Dynamics):
     def __init__(self, IREC_COMPLIANT: bool, rocket_name: Optional[str] = None, dynamics: Dynamics = None):
@@ -37,6 +39,7 @@ class Controls(Dynamics):
         self.L : np.array = None  # Observer gain matrix
 
         self.sensor_model : Callable = None  # User-defined sensor output function
+        self.r : Callable = None  # Reference trajectory function
 
         # Cached numeric helpers
         self._A_numeric = None
@@ -87,7 +90,7 @@ class Controls(Dynamics):
             ValueError: If any parameter is not set.
         """
         super().checkParamsSet()
-        required_controls_params = ['sensor_vars', 'max_input', 'u0', 'K', 'L', 'sensor_model', 'M_controls_func']
+        required_controls_params = ['sensor_vars', 'max_input', 'u0', 'K', 'L', 'sensor_model', 'M_controls_func', 'r']
         for param in required_controls_params:
             if getattr(self, param) is None:
                 raise ValueError(f"Controls parameter '{param}' not set. Please set it before running the simulation.")
@@ -276,4 +279,50 @@ class Controls(Dynamics):
             K (Callable): Function that takes in time and state, and returns the gain matrix.
         """
         self.K = K
+    
+
+    def set_reference(self, r: Callable):
+        """Set the reference trajectory for the control system to track.
+        
+        Args:
+            r (Callable): Function that takes time t and returns a reference state vector.
+                          The reference state should be a numpy array with the same dimensions
+                          as the state vector (10 elements: w1, w2, w3, v1, v2, v3, qw, qx, qy, qz).
+        """
+        self.r = r
+    
+
+    def compute_control(self, t: float, xhat: np.ndarray) -> np.ndarray:
+        """Compute the control input using state feedback control law with saturation.
+        
+        This implements: u = -K(t, xhat) @ (r(t) - xhat)
+        with saturation to respect actuator limits.
+        
+        Args:
+            t (float): Current time in seconds.
+            xhat (np.ndarray): Current estimated state vector (10 elements).
+            
+        Returns:
+            np.ndarray: Control input vector (e.g., fin deflection angles).
+        """
+        # Get reference state at current time
+        r_t = self.r(t)
+        
+        # Compute error: e = r - x̂
+        error = r_t - xhat
+        
+        # Get gain matrix (could be time-varying or state-dependent)
+        K_t = self.K(t, xhat)
+        
+        # Control law: u = -K @ e
+        u = -K_t @ error
+        
+        # Apply saturation (actuator limits)
+        u = np.clip(u, -self.max_input, self.max_input)
+        
+        # IREC compliance: disable control during motor burn
+        if self.IREC_COMPLIANT and self.is_motor_burning(t):
+            u = np.zeros_like(u)
+        
+        return u
     
