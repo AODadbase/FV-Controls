@@ -336,7 +336,7 @@ class Controls(Dynamics):
         
         ẋ̂ = A*x̂ + B*u + L*(y - ŷ)
         
-        It is the core function, it takes:
+        it takes:
             t: Current time in seconds.
             xhat: Current estimated state vector.
             u: Current control input vector.
@@ -356,4 +356,98 @@ class Controls(Dynamics):
         xhat_dot = A @ xhat + B @ u + self.L @ innovation
         
         return xhat_dot
+    
+
+    def simulate_closed_loop(self, t_span: tuple, x0: np.ndarray, xhat0: np.ndarray, 
+                            save_interval: float = 0.01, rtol: float = 1e-6, atol: float = 1e-8):
+        """Simulate the complete closed-loop control system.
+        
+        takes:
+            t_span (tuple): Time interval in seconds.
+            x0: Initial true state.
+            xhat0: Initial estimated state.
+            save_interval: Time interval for saving results.
+            rtol: Relative tolerance for integrator.
+            atol: Absolute tolerance for integrator.
+            
+        returns:
+            Dictionary containing simulation results:
+                - 't': Time array
+                - 'x': True state trajectory (N x 10)
+                - 'xhat': Estimated state trajectory (N x 10)
+                - 'u': Control input trajectory (N x input_dim)
+                - 'y': Sensor measurement trajectory (N x sensor_dim)
+                
+            # Access results
+            time = results['t']
+            true_states = results['x']
+            estimated_states = results['xhat']
+            control_inputs = results['u']
+        """
+        self.checkParamsSet()
+        
+        def closed_loop_dynamics(t, z):
+            x = z[:10]  # True state
+            xhat = z[10:]  # Estimated state
+            
+            y = self.sensor_model(t, x)
+            
+            # control input from estimated state
+            u = self.compute_control(t, xhat)
+            
+            x_dot = self.f_numeric(t, x, u)
+            
+            # Observer dynamics
+            xhat_dot = self.observer_dynamics(t, xhat, u, y)
+            
+            # Concatenate derivatives
+            z_dot = np.concatenate([x_dot, xhat_dot])
+            
+            return z_dot
+        
+        z0 = np.concatenate([x0, xhat0])
+        
+        t_eval = np.arange(t_span[0], t_span[1], save_interval)
+        
+        # Integrate the closed-loop system
+        print(f"Simulating closed-loop system from t={t_span[0]}s to t={t_span[1]}s...")
+        solution = solve_ivp(
+            closed_loop_dynamics,
+            t_span,
+            z0,
+            method='RK45',
+            t_eval=t_eval,
+            rtol=rtol,
+            atol=atol,
+            dense_output=False
+        )
+        
+        if not solution.success:
+            raise RuntimeError(f"Integration failed: {solution.message}")
+        
+        #results
+        t = solution.t
+        x_trajectory = solution.y[:10, :].T  # True states
+        xhat_trajectory = solution.y[10:, :].T  # Estimated states
+        
+        n_points = len(t)
+        u_dim = len(self.input_vars)
+        y_dim = len(self.sensor_vars)
+        
+        u_trajectory = np.zeros((n_points, u_dim))
+        y_trajectory = np.zeros((n_points, y_dim))
+        
+        for i in range(n_points):
+            y_trajectory[i] = self.sensor_model(t[i], x_trajectory[i])
+            u_trajectory[i] = self.compute_control(t[i], xhat_trajectory[i])
+        
+        print(f"Simulation complete. {n_points} time points saved.")
+        
+        return {
+            't': t,
+            'x': x_trajectory,
+            'xhat': xhat_trajectory,
+            'u': u_trajectory,
+            'y': y_trajectory
+        }
     
